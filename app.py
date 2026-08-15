@@ -114,50 +114,12 @@ table.league-table tr:hover td { background-color: var(--accent-soft); }
 table.league-table td.rank { color: var(--accent); font-weight: 600; }
 
 @media (max-width: 640px) {
-    .block-container { padding-left: 0.8rem; padding-right: 0.8rem; }
+    .block-container { padding-left: 0.6rem; padding-right: 0.6rem; }
     .brand-bar { font-size: 1.25rem; }
     div[data-testid="stSelectbox"] [data-baseweb="select"] > div { font-size: 1.4rem; }
 
-    /* turn the table into a stack of cards, one per player */
-    .league-table-wrap { overflow-x: visible; }
-    table.league-table, table.league-table thead, table.league-table tbody,
-    table.league-table th, table.league-table td, table.league-table tr {
-        display: block;
-        width: 100%;
-    }
-    table.league-table thead { display: none; }
-    table.league-table tr {
-        border: 1.5px solid var(--line);
-        border-radius: 10px;
-        margin-bottom: 10px;
-        padding: 6px 0;
-    }
-    table.league-table td {
-        border: none;
-        border-bottom: 1px solid rgba(255,255,255,0.08);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 7px 12px;
-        white-space: normal;
-        word-break: break-word;
-        text-align: right;
-    }
-    table.league-table tr td:last-child { border-bottom: none; }
-    table.league-table td::before {
-        content: attr(data-label);
-        font-family: 'Poppins', sans-serif;
-        font-weight: 600;
-        font-size: 0.72rem;
-        text-transform: uppercase;
-        letter-spacing: 0.4px;
-        color: var(--accent);
-        margin-right: 12px;
-        text-align: left;
-    }
-    table.league-table td.rank {
-        font-size: 1rem;
-    }
+    table.league-table { min-width: 0; width: 100%; font-size: 0.68rem; }
+    table.league-table th, table.league-table td { padding: 4px 4px; }
 }
 
 /* --- section headings --- */
@@ -195,9 +157,7 @@ h1, h2, h3 { font-family: 'Poppins', sans-serif !important; color: var(--text) !
 
 
 def render_table(rows: list[dict]):
-    """Renders a list of dicts as the sketch-style bordered table.
-    On narrow screens the CSS turns each row into a stacked card
-    (see the @media block) so nothing gets squeezed."""
+    """Renders a list of dicts as the sketch-style bordered table."""
     if not rows:
         st.markdown('<p class="muted">No results yet.</p>', unsafe_allow_html=True)
         return
@@ -210,7 +170,7 @@ def render_table(rows: list[dict]):
         html.append("<tr>")
         for i, c in enumerate(cols):
             cls = ' class="rank"' if i == 0 else ""
-            html.append(f'<td{cls} data-label="{c}">{r[c]}</td>')
+            html.append(f"<td{cls}>{r[c]}</td>")
         html.append("</tr>")
     html.append("</tbody></table></div>")
     st.markdown("".join(html), unsafe_allow_html=True)
@@ -218,7 +178,7 @@ def render_table(rows: list[dict]):
 
 def standings_rows(table):
     return [{
-        "#": i + 1, "Player": f"{r['ign']} ({r['club_name']})",
+        "#": i + 1, "IGN": r["ign"],
         "P": r["played"], "W": r["won"], "D": r["drawn"], "L": r["lost"],
         "GF": r["gf"], "GA": r["ga"], "GD": r["gd"], "Pts": r["points"],
     } for i, r in enumerate(table)]
