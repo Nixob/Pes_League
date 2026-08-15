@@ -1,64 +1,186 @@
 import streamlit as st
 import db
 
-st.set_page_config(page_title="eFootball GC League", page_icon="⚽", layout="wide")
+st.set_page_config(page_title="PES With the Bois", page_icon="🟣", layout="wide", initial_sidebar_state="collapsed")
 
-PAGES = ["Join / Register", "Fixtures", "Table", "History", "Admin"]
+PAGE_LABELS = {
+    "fixtures": "Fixtures",
+    "table": "League Standing",
+    "history": "History",
+    "register": "Register",
+    "admin": "Admin",
+}
 
 
 def player_label(p):
     return f"{p['ign']}  ({p['club_name']})"
 
 
+# ---------------------------------------------------------------- styling --
+
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+    --accent: #B83CF0;
+    --accent-soft: rgba(184, 60, 240, 0.12);
+    --line: #7d7d84;
+    --bg: #0e0e10;
+    --card: #17181c;
+    --text: #f5f5f7;
+    --muted: #9a9aa1;
+}
+
+html, body, .stApp { background-color: var(--bg) !important; }
+* { font-family: 'Inter', sans-serif; }
+
+/* hide Streamlit chrome we don't want */
+#MainMenu, footer, header[data-testid="stHeader"] { visibility: hidden; height: 0; }
+.block-container { padding-top: 2.2rem; max-width: 1100px; }
+
+/* --- brand bar --- */
+.brand-bar {
+    font-family: 'Poppins', sans-serif;
+    font-weight: 600;
+    font-size: 1.15rem;
+    color: var(--accent);
+    letter-spacing: 0.2px;
+    margin-bottom: 1.6rem;
+}
+
+/* --- page nav dropdown: make the selectbox look like a big heading --- */
+div[data-testid="stSelectbox"] {
+    max-width: 340px;
+    margin: 0 auto 2.2rem auto;
+}
+div[data-testid="stSelectbox"] label { display: none; }
+div[data-testid="stSelectbox"] > div > div {
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
+    background-color: transparent !important;
+    border: none !important;
+    font-family: 'Poppins', sans-serif;
+    font-weight: 600;
+    font-size: 1.8rem;
+    color: var(--accent) !important;
+    justify-content: center;
+    text-align: center;
+    padding-left: 0;
+}
+div[data-testid="stSelectbox"] svg { fill: var(--accent) !important; }
+div[data-testid="stSelectbox"] input { text-align: center; }
+
+/* --- custom table matching the sketch: thin grey grid, purple header --- */
+.league-table-wrap { display: flex; justify-content: center; margin: 1rem 0 2rem 0; }
+table.league-table {
+    border-collapse: collapse;
+    min-width: 640px;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.92rem;
+}
+table.league-table th, table.league-table td {
+    border: 1.5px solid var(--line);
+    padding: 10px 16px;
+    text-align: center;
+    color: var(--text);
+}
+table.league-table th {
+    color: var(--accent);
+    font-weight: 600;
+    font-family: 'Poppins', sans-serif;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+table.league-table td:nth-child(2) { text-align: left; }
+table.league-table tr:hover td { background-color: var(--accent-soft); }
+table.league-table td.rank { color: var(--accent); font-weight: 600; }
+
+/* --- section headings --- */
+h1, h2, h3 { font-family: 'Poppins', sans-serif !important; color: var(--text) !important; }
+.section-title {
+    font-family: 'Poppins', sans-serif;
+    font-weight: 600;
+    color: var(--text);
+    font-size: 1.1rem;
+    margin: 1.6rem 0 0.6rem 0;
+}
+.muted { color: var(--muted); font-size: 0.9rem; }
+
+/* --- buttons --- */
+.stButton > button {
+    border-radius: 8px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+}
+.stButton > button[kind="primary"] {
+    background-color: var(--accent);
+    border: none;
+}
+
+/* --- footer link --- */
+.footer-link {
+    margin-top: 2.5rem;
+    font-family: 'Inter', sans-serif;
+    color: var(--accent);
+    opacity: 0.9;
+    font-size: 0.95rem;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+def render_table(rows: list[dict]):
+    """Renders a list of dicts as the sketch-style bordered table."""
+    if not rows:
+        st.markdown('<p class="muted">No results yet.</p>', unsafe_allow_html=True)
+        return
+    cols = list(rows[0].keys())
+    html = ['<div class="league-table-wrap"><table class="league-table"><thead><tr>']
+    for c in cols:
+        html.append(f"<th>{c}</th>")
+    html.append("</tr></thead><tbody>")
+    for r in rows:
+        html.append("<tr>")
+        for i, c in enumerate(cols):
+            cls = ' class="rank"' if i == 0 else ""
+            html.append(f"<td{cls}>{r[c]}</td>")
+        html.append("</tr>")
+    html.append("</tbody></table></div>")
+    st.markdown("".join(html), unsafe_allow_html=True)
+
+
+def standings_rows(table):
+    return [{
+        "#": i + 1, "Player": f"{r['ign']} ({r['club_name']})",
+        "P": r["played"], "W": r["won"], "D": r["drawn"], "L": r["lost"],
+        "GF": r["gf"], "GA": r["ga"], "GD": r["gd"], "Pts": r["points"],
+    } for i, r in enumerate(table)]
+
+
 # --------------------------------------------------------------------- UI --
 
-st.title("⚽ eFootball Mobile — GC League")
+st.markdown('<div class="brand-bar">PES With the Bois</div>', unsafe_allow_html=True)
 
-page = st.sidebar.radio("Go to", PAGES)
-
-
-# ---------------------------------------------------------- Join/Register --
-if page == "Join / Register":
-    st.header("Join the league")
-    st.write("Enter your club name and in-game name. The admin will approve you before you show up in fixtures.")
-
-    with st.form("register_form", clear_on_submit=True):
-        club_name = st.text_input("Club name")
-        ign = st.text_input("In-game name (IGN)")
-        submitted = st.form_submit_button("Submit for approval")
-        if submitted:
-            if not club_name or not ign:
-                st.error("Both fields are required.")
-            else:
-                try:
-                    db.register_player(club_name, ign)
-                    st.success("Submitted! Waiting on admin approval.")
-                except Exception as e:
-                    st.error(str(e))
-
-    st.divider()
-    st.subheader("Approved players")
-    approved = db.list_players(status="approved")
-    if approved:
-        st.dataframe(
-            [{"Club": p["club_name"], "IGN": p["ign"], "Active": p["active"]} for p in approved],
-            use_container_width=True, hide_index=True,
-        )
-    else:
-        st.caption("No approved players yet.")
+page_key = st.selectbox(
+    "nav", options=list(PAGE_LABELS.keys()), index=1,
+    format_func=lambda k: f"{PAGE_LABELS[k]}  ▾", label_visibility="collapsed",
+)
 
 
-# ------------------------------------------------------------- Fixtures ---
-elif page == "Fixtures":
-    st.header("Fixtures")
+# ------------------------------------------------------------------ Fixtures --
+if page_key == "fixtures":
     league = db.get_active_league()
 
     if not league:
         st.info("No active league right now. An admin needs to start one.")
     else:
-        st.subheader(league["name"])
+        st.markdown(f'<div class="section-title">{league["name"]}</div>', unsafe_allow_html=True)
         fixtures = db.list_fixtures(league["id"])
-        players = {p["id"]: p for p in db.list_players()}
 
         approved_players = [p for p in db.list_players(status="approved") if p["active"]]
         names = {p["id"]: player_label(p) for p in approved_players}
@@ -71,20 +193,20 @@ elif page == "Fixtures":
             nxt = db.next_fixture_for_player(league["id"], me)
             if nxt:
                 st.success(
-                    f"Your next fixture: **{player_label(nxt['home'])}** vs "
-                    f"**{player_label(nxt['away'])}**  (leg {nxt['leg']})"
+                    f"Your next fixture: **{nxt['home_ign']} ({nxt['home_club_name']})** vs "
+                    f"**{nxt['away_ign']} ({nxt['away_club_name']})**  (leg {nxt['leg']})"
                 )
             else:
                 st.info("You have no unplayed fixtures left — nice, you're done for this cycle.")
 
-        st.divider()
-        st.subheader("Full fixture list")
-        st.caption("Tick a fixture once it's been played and enter the score. Ticked fixtures turn green.")
+        st.markdown('<div class="section-title">Full fixture list</div>', unsafe_allow_html=True)
+        st.markdown('<p class="muted">Tick a fixture once it\'s been played and enter the score.</p>', unsafe_allow_html=True)
 
         for f in fixtures:
-            home, away = f["home"], f["away"]
+            home_label = f"{f['home_ign']}  ({f['home_club_name']})"
+            away_label = f"{f['away_ign']}  ({f['away_club_name']})"
             cols = st.columns([4, 1, 1, 1, 1])
-            label = f"{player_label(home)}  vs  {player_label(away)}  (leg {f['leg']})"
+            label = f"{home_label}  vs  {away_label}  (leg {f['leg']})"
 
             if f["played"]:
                 cols[0].markdown(f":green[✅ {label}]  —  **{f['home_score']} – {f['away_score']}**")
@@ -100,51 +222,58 @@ elif page == "Fixtures":
                     st.rerun()
 
 
-# ---------------------------------------------------------------- Table ---
-elif page == "Table":
-    st.header("League Table")
+# --------------------------------------------------------------------- Table --
+elif page_key == "table":
     league = db.get_active_league()
 
     if not league:
         st.info("No active league right now.")
     else:
-        st.subheader(league["name"])
+        st.markdown(f'<p class="muted" style="text-align:center;">{league["name"]}</p>', unsafe_allow_html=True)
         table = db.get_standings(league["id"])
-        if not table:
-            st.caption("No results played yet.")
-        else:
-            rows = [{
-                "#": i + 1,
-                "Club": r["club_name"], "IGN": r["ign"],
-                "P": r["played"], "W": r["won"], "D": r["drawn"], "L": r["lost"],
-                "GF": r["gf"], "GA": r["ga"], "GD": r["gd"], "Pts": r["points"],
-            } for i, r in enumerate(table)]
-            st.dataframe(rows, use_container_width=True, hide_index=True)
+        render_table(standings_rows(table))
 
 
-# -------------------------------------------------------------- History ---
-elif page == "History":
-    st.header("League History")
+# ------------------------------------------------------------------- History --
+elif page_key == "history":
     completed = db.list_completed_leagues()
     if not completed:
-        st.caption("No completed leagues yet — first champion is still TBD.")
+        st.markdown('<p class="muted">No completed leagues yet — first champion is still TBD.</p>', unsafe_allow_html=True)
     else:
         for lg in completed:
             winner = lg.get("winner")
             winner_str = f"{winner['ign']} ({winner['club_name']})" if winner else "—"
             with st.expander(f"🏆 {lg['name']} — winner: {winner_str}"):
                 table = db.get_standings(lg["id"])
-                rows = [{
-                    "#": i + 1, "Club": r["club_name"], "IGN": r["ign"],
-                    "P": r["played"], "W": r["won"], "D": r["drawn"], "L": r["lost"],
-                    "GF": r["gf"], "GA": r["ga"], "GD": r["gd"], "Pts": r["points"],
-                } for i, r in enumerate(table)]
-                st.dataframe(rows, use_container_width=True, hide_index=True)
+                render_table(standings_rows(table))
 
 
-# ---------------------------------------------------------------- Admin ---
-elif page == "Admin":
-    st.header("Admin")
+# ------------------------------------------------------------------ Register --
+elif page_key == "register":
+    st.markdown('<div class="section-title">Join the league</div>', unsafe_allow_html=True)
+    st.markdown('<p class="muted">Enter your club name and in-game name. The admin will approve you before you show up in fixtures.</p>', unsafe_allow_html=True)
+
+    with st.form("register_form", clear_on_submit=True):
+        club_name = st.text_input("Club name")
+        ign = st.text_input("In-game name (IGN)")
+        submitted = st.form_submit_button("Submit for approval", type="primary")
+        if submitted:
+            if not club_name or not ign:
+                st.error("Both fields are required.")
+            else:
+                try:
+                    db.register_player(club_name, ign)
+                    st.success("Submitted! Waiting on admin approval.")
+                except Exception as e:
+                    st.error(str(e))
+
+    st.markdown('<div class="section-title">Approved players</div>', unsafe_allow_html=True)
+    approved = db.list_players(status="approved")
+    render_table([{"Club": p["club_name"], "IGN": p["ign"], "Active": "Yes" if p["active"] else "No"} for p in approved])
+
+
+# --------------------------------------------------------------------- Admin --
+elif page_key == "admin":
     pw = st.text_input("Admin password", type="password")
     if pw != st.secrets.get("ADMIN_PASSWORD", ""):
         st.warning("Enter the admin password to continue.")
@@ -152,10 +281,10 @@ elif page == "Admin":
 
     st.success("Logged in as admin.")
 
-    st.subheader("Pending approvals")
+    st.markdown('<div class="section-title">Pending approvals</div>', unsafe_allow_html=True)
     pending = db.list_players(status="pending")
     if not pending:
-        st.caption("Nothing pending.")
+        st.markdown('<p class="muted">Nothing pending.</p>', unsafe_allow_html=True)
     else:
         for p in pending:
             c1, c2, c3 = st.columns([4, 1, 1])
@@ -170,8 +299,8 @@ elif page == "Admin":
                 db.reject_player(p["id"])
                 st.rerun()
 
-    st.divider()
-    st.subheader(f"All players ({db.player_count()}/{db.MAX_PLAYERS} approved)")
+    st.markdown(f'<div class="section-title">All players ({db.player_count()}/{db.MAX_PLAYERS} approved)</div>', unsafe_allow_html=True)
+    st.markdown('<p class="muted">Removing a player deletes them from the list, but past match history keeps their name — old tables aren\'t affected.</p>', unsafe_allow_html=True)
     all_players = db.list_players()
     for p in all_players:
         c1, c2, c3, c4 = st.columns([3, 2, 1, 1])
@@ -188,27 +317,24 @@ elif page == "Admin":
             except Exception as e:
                 st.error(str(e))
 
-    st.divider()
-    st.subheader("Add a player directly")
+    st.markdown('<div class="section-title">Add a player directly</div>', unsafe_allow_html=True)
     with st.form("admin_add_form", clear_on_submit=True):
         c1, c2 = st.columns(2)
         club = c1.text_input("Club name")
         ign = c2.text_input("IGN")
-        if st.form_submit_button("Add"):
+        if st.form_submit_button("Add", type="primary"):
             try:
                 db.admin_add_player(club, ign)
                 st.rerun()
             except Exception as e:
                 st.error(str(e))
 
-    st.divider()
-    st.subheader("League management")
+    st.markdown('<div class="section-title">League management</div>', unsafe_allow_html=True)
     active_league = db.get_active_league()
 
     if active_league:
         st.write(f"Active league: **{active_league['name']}**")
-        table = db.get_standings(active_league["id"])
-        if st.button("🏁 Complete this league (locks table, tags winner)"):
+        if st.button("🏁 Complete this league (locks table, tags winner)", type="primary"):
             try:
                 db.complete_league(active_league["id"])
                 st.success("League completed and archived.")
@@ -223,7 +349,7 @@ elif page == "Admin":
             format_func=lambda pid: player_label(next(p for p in approved if p["id"] == pid)),
         )
         league_name = st.text_input("League name", value="Season 1")
-        if st.button("🚀 Start league"):
+        if st.button("🚀 Start league", type="primary"):
             if len(chosen) < 2:
                 st.error("Pick at least 2 players.")
             else:
@@ -233,3 +359,28 @@ elif page == "Admin":
                     st.rerun()
                 except Exception as e:
                     st.error(str(e))
+
+    st.markdown('<div class="section-title">Delete league history</div>', unsafe_allow_html=True)
+    st.markdown('<p class="muted">Permanently deletes a completed league and its fixtures — no undo.</p>', unsafe_allow_html=True)
+    completed = db.list_completed_leagues()
+    if not completed:
+        st.markdown('<p class="muted">No completed leagues to delete.</p>', unsafe_allow_html=True)
+    else:
+        for lg in completed:
+            c1, c2, c3 = st.columns([4, 2, 1])
+            c1.write(f"**{lg['name']}**")
+            confirm = c2.checkbox("Confirm delete", key=f"confirm_del_{lg['id']}")
+            if c3.button("🗑️ Delete", key=f"del_league_{lg['id']}", disabled=not confirm):
+                db.delete_league(lg["id"])
+                st.success(f"Deleted {lg['name']}.")
+                st.rerun()
+
+
+# ------------------------------------------------------------------- Footer --
+if page_key == "register":
+    pass
+else:
+    st.markdown(
+        '<div class="footer-link">Not registered yet? Switch the dropdown above to <b>Register</b> ⚽</div>',
+        unsafe_allow_html=True,
+    )
