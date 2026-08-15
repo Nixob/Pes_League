@@ -76,7 +76,14 @@ div[data-testid="stSelectbox"] svg { fill: var(--accent) !important; }
 div[data-testid="stSelectbox"] input { text-align: center; }
 
 /* --- custom table matching the sketch: thin grey grid, purple header --- */
-.league-table-wrap { display: flex; justify-content: center; margin: 1rem 0 2rem 0; }
+.league-table-wrap {
+    display: flex;
+    justify-content: center;
+    margin: 1rem 0 2rem 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+}
 table.league-table {
     border-collapse: collapse;
     min-width: 640px;
@@ -88,6 +95,7 @@ table.league-table th, table.league-table td {
     padding: 10px 16px;
     text-align: center;
     color: var(--text);
+    white-space: nowrap;
 }
 table.league-table th {
     color: var(--accent);
@@ -100,6 +108,14 @@ table.league-table th {
 table.league-table td:nth-child(2) { text-align: left; }
 table.league-table tr:hover td { background-color: var(--accent-soft); }
 table.league-table td.rank { color: var(--accent); font-weight: 600; }
+
+@media (max-width: 640px) {
+    .block-container { padding-left: 0.8rem; padding-right: 0.8rem; }
+    table.league-table { min-width: 520px; font-size: 0.8rem; }
+    table.league-table th, table.league-table td { padding: 7px 10px; }
+    .brand-bar { font-size: 1.25rem; }
+    div[data-testid="stSelectbox"] [data-baseweb="select"] > div { font-size: 1.4rem; }
+}
 
 /* --- section headings --- */
 h1, h2, h3 { font-family: 'Poppins', sans-serif !important; color: var(--text) !important; }
@@ -241,6 +257,7 @@ elif page_key == "table":
         st.markdown(f'<p class="muted" style="text-align:center;">{league["name"]}</p>', unsafe_allow_html=True)
         table = db.get_standings(league["id"])
         render_table(standings_rows(table))
+        st.markdown('<p class="muted" style="text-align:center;">Swipe sideways on mobile to see the full table →</p>', unsafe_allow_html=True)
 
 
 # ------------------------------------------------------------------- History --
@@ -393,4 +410,10 @@ elif page_key == "admin":
 
 
 # ------------------------------------------------------------------- Footer --
-
+if page_key == "register":
+    pass
+else:
+    st.markdown(
+        '<div class="footer-link">Not registered yet? Switch the dropdown above to <b>Register</b> ⚽</div>',
+        unsafe_allow_html=True,
+    )
