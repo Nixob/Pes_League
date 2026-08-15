@@ -342,6 +342,13 @@ elif page_key == "admin":
                 st.rerun()
             except Exception as e:
                 st.error(str(e))
+
+        st.markdown('<p class="muted">Made a mistake starting this one (wrong players, test league, etc)? Cancel it below instead of completing it — this deletes it with no archive.</p>', unsafe_allow_html=True)
+        cancel_confirm = st.checkbox("Confirm cancel — this deletes the league and its fixtures, no undo", key="cancel_active_confirm")
+        if st.button("🗑️ Cancel & delete this league", disabled=not cancel_confirm):
+            db.delete_league(active_league["id"])
+            st.success("League cancelled and deleted.")
+            st.rerun()
     else:
         st.write("No active league. Start one from approved, active players:")
         approved = [p for p in db.list_players(status="approved") if p["active"]]
@@ -378,4 +385,10 @@ elif page_key == "admin":
 
 
 # ------------------------------------------------------------------- Footer --
-
+if page_key == "register":
+    pass
+else:
+    st.markdown(
+        '<div class="footer-link">Not registered yet? Switch the dropdown above to <b>Register</b> ⚽</div>',
+        unsafe_allow_html=True,
+    )
