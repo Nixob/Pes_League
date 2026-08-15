@@ -76,7 +76,19 @@ def update_player(player_id: str, club_name: str, ign: str, active: bool):
 
 
 def remove_player(player_id: str):
+    """Hard-deletes a player. Only works if they've never been part of a
+    league's fixtures — Postgres blocks the delete otherwise to protect
+    match history. Use set_player_active/update_player(active=False)
+    to retire someone who already has results recorded."""
     sb = get_client()
+    in_fixtures = sb.table("fixtures").select("id") \
+        .or_(f"home_player_id.eq.{player_id},away_player_id.eq.{player_id}") \
+        .limit(1).execute().data
+    if in_fixtures:
+        raise ValueError(
+            "Can't remove this player — they already have match history. "
+            "Untick 'Active' instead to hide them from new leagues without losing past results."
+        )
     return sb.table("players").delete().eq("id", player_id).execute().data
 
 
