@@ -200,10 +200,18 @@ if page_key == "fixtures":
             else:
                 st.info("You have no unplayed fixtures left — nice, you're done for this cycle.")
 
-        st.markdown('<div class="section-title">Full fixture list</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">Fixture list</div>', unsafe_allow_html=True)
         st.markdown('<p class="muted">Tick a fixture once it\'s been played and enter the score.</p>', unsafe_allow_html=True)
 
-        for f in fixtures:
+        if me:
+            show_all = st.checkbox("Show everyone's fixtures instead of just mine")
+            visible_fixtures = fixtures if show_all else [
+                f for f in fixtures if me in (f["home_player_id"], f["away_player_id"])
+            ]
+        else:
+            visible_fixtures = fixtures
+
+        for f in visible_fixtures:
             home_label = f"{f['home_ign']}  ({f['home_club_name']})"
             away_label = f"{f['away_ign']}  ({f['away_club_name']})"
             cols = st.columns([4, 1, 1, 1, 1])
@@ -385,4 +393,10 @@ elif page_key == "admin":
 
 
 # ------------------------------------------------------------------- Footer --
-
+if page_key == "register":
+    pass
+else:
+    st.markdown(
+        '<div class="footer-link">Not registered yet? Switch the dropdown above to <b>Register</b> ⚽</div>',
+        unsafe_allow_html=True,
+    )
