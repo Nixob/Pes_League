@@ -182,8 +182,11 @@ elif page == "Admin":
             db.update_player(p["id"], p["club_name"], p["ign"], active)
             st.rerun()
         if c4.button("Remove", key=f"rm_{p['id']}"):
-            db.remove_player(p["id"])
-            st.rerun()
+            try:
+                db.remove_player(p["id"])
+                st.rerun()
+            except Exception as e:
+                st.error(str(e))
 
     st.divider()
     st.subheader("Add a player directly")
