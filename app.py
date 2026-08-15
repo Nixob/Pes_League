@@ -43,9 +43,10 @@ html, body, .stApp { background-color: var(--bg) !important; }
 .brand-bar {
     font-family: 'Poppins', sans-serif;
     font-weight: 600;
-    font-size: 1.15rem;
+    font-size: 1.55rem;
     color: var(--accent);
     letter-spacing: 0.2px;
+    text-align: center;
     margin-bottom: 1.6rem;
 }
 
@@ -377,4 +378,10 @@ elif page_key == "admin":
 
 
 # ------------------------------------------------------------------- Footer --
-
+if page_key == "register":
+    pass
+else:
+    st.markdown(
+        '<div class="footer-link">Not registered yet? Switch the dropdown above to <b>Register</b> ⚽</div>',
+        unsafe_allow_html=True,
+    )
