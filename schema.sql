@@ -20,7 +20,7 @@ create table if not exists leagues (
     id uuid primary key default gen_random_uuid(),
     name text not null,
     status text not null default 'active' check (status in ('active', 'completed')),
-    winner_player_id uuid references players(id),
+    winner_player_id uuid references players(id) on delete set null,
     started_at timestamptz not null default now(),
     completed_at timestamptz
 );
@@ -28,16 +28,22 @@ create table if not exists leagues (
 -- Which players are in a given league
 create table if not exists league_participants (
     league_id uuid not null references leagues(id) on delete cascade,
-    player_id uuid not null references players(id),
+    player_id uuid not null references players(id) on delete cascade,
     primary key (league_id, player_id)
 );
 
 -- Fixtures (auto-generated home & away round robin when a league starts)
+-- home/away club_name + ign are snapshotted at fixture-creation time so
+-- that deleting a player later doesn't erase history.
 create table if not exists fixtures (
     id uuid primary key default gen_random_uuid(),
     league_id uuid not null references leagues(id) on delete cascade,
-    home_player_id uuid not null references players(id),
-    away_player_id uuid not null references players(id),
+    home_player_id uuid references players(id) on delete set null,
+    away_player_id uuid references players(id) on delete set null,
+    home_club_name text,
+    home_ign text,
+    away_club_name text,
+    away_ign text,
     leg int not null check (leg in (1, 2)), -- 1 = first meeting, 2 = reverse fixture
     played boolean not null default false,
     home_score int,
