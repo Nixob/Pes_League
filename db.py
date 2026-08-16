@@ -76,10 +76,14 @@ def update_player(player_id: str, club_name: str, ign: str, active: bool):
 
 
 def remove_player(player_id: str):
-    """Hard-deletes a player. Safe to call even if they have match history —
-    fixtures keep a name snapshot and just lose the live link (home/away
-    player_id becomes null), so past tables stay intact."""
+    """Hard-deletes a player. Any of their fixtures already PLAYED are left
+    untouched — that's real history, and it keeps other players' records
+    accurate. Any UNPLAYED fixtures involving them are deleted too, so they
+    don't linger as a ghost row (0 played, 0 pts) in the standings table."""
     sb = get_client()
+    sb.table("fixtures").delete().eq("played", False).or_(
+        f"home_player_id.eq.{player_id},away_player_id.eq.{player_id}"
+    ).execute()
     return sb.table("players").delete().eq("id", player_id).execute().data
 
 
