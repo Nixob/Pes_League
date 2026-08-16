@@ -209,6 +209,18 @@ def list_fixtures(league_id: str):
         .eq("league_id", league_id).order("leg").execute().data
 
 
+def leg1_complete(league_id: str) -> bool:
+    """True once every Leg 1 fixture in the league has been played."""
+    fixtures = list_fixtures(league_id)
+    leg1 = [f for f in fixtures if f["leg"] == 1]
+    return bool(leg1) and all(f["played"] for f in leg1)
+
+
+def unlock_leg2(league_id: str):
+    sb = get_client()
+    return sb.table("leagues").update({"leg2_unlocked": True}).eq("id", league_id).execute()
+
+
 def next_fixture_for_player(league_id: str, player_id: str):
     fixtures = list_fixtures(league_id)
     for f in fixtures:
