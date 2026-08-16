@@ -441,10 +441,4 @@ elif page_key == "admin":
 
 
 # ------------------------------------------------------------------- Footer --
-if page_key == "register":
-    pass
-else:
-    st.markdown(
-        '<div class="footer-link">Not registered yet? Switch the dropdown above to <b>Register</b> ⚽</div>',
-        unsafe_allow_html=True,
-    )
+
