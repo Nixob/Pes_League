@@ -270,6 +270,15 @@ elif page_key == "fixtures":
             format_func=lambda pid: "— select your name —" if pid is None else names[pid],
         )
 
+        if not league["leg2_unlocked"]:
+            st.markdown(
+                '<p class="muted">🔒 Leg 2 fixtures are locked until the admin opens them '
+                '(once every Leg 1 match is played).</p>',
+                unsafe_allow_html=True,
+            )
+
+        leg_filter = st.radio("View", options=["All", "Leg 1", "Leg 2"], horizontal=True, label_visibility="collapsed")
+
         st.markdown('<div class="section-title">Fixture list</div>', unsafe_allow_html=True)
         st.markdown('<p class="muted">Tick a fixture once it\'s been played and enter the score.</p>', unsafe_allow_html=True)
 
@@ -280,6 +289,10 @@ elif page_key == "fixtures":
             ]
         else:
             visible_fixtures = fixtures
+
+        if leg_filter != "All":
+            wanted_leg = 1 if leg_filter == "Leg 1" else 2
+            visible_fixtures = [f for f in visible_fixtures if f["leg"] == wanted_leg]
 
         for f in visible_fixtures:
             with st.container(border=True):
@@ -296,6 +309,8 @@ elif page_key == "fixtures":
                         db.unmark_result(f["id"])
                         st.toast("Result undone.", icon="↩️")
                         st.rerun()
+                elif f["leg"] == 2 and not league["leg2_unlocked"]:
+                    st.markdown('<p class="muted">🔒 Locked until Leg 1 is complete.</p>', unsafe_allow_html=True)
                 else:
                     c1, c2, c3 = st.columns([1, 1, 1.4])
                     hs = c1.number_input("Home", min_value=0, max_value=20, step=1, key=f"hs_{f['id']}")
@@ -430,6 +445,23 @@ elif page_key == "admin":
 
     if active_league:
         st.write(f"Active league: **{active_league['name']}**")
+
+        st.markdown('<p class="section-title" style="font-size: 1rem;">Leg 2 lock</p>', unsafe_allow_html=True)
+        if active_league["leg2_unlocked"]:
+            st.markdown('<p class="muted">🔓 Leg 2 is unlocked — reverse fixtures can be played.</p>', unsafe_allow_html=True)
+        else:
+            all_leg1_done = db.leg1_complete(active_league["id"])
+            fixtures_now = db.list_fixtures(active_league["id"])
+            leg1_total = sum(1 for f in fixtures_now if f["leg"] == 1)
+            leg1_played = sum(1 for f in fixtures_now if f["leg"] == 1 and f["played"])
+            st.markdown(f'<p class="muted">Leg 1 progress: {leg1_played}/{leg1_total} played</p>', unsafe_allow_html=True)
+            if st.button("🔓 Unlock Leg 2 matches", disabled=not all_leg1_done):
+                db.unlock_leg2(active_league["id"])
+                st.success("Leg 2 unlocked — reverse fixtures can now be played.")
+                st.rerun()
+            if not all_leg1_done:
+                st.markdown('<p class="muted">Unlocks automatically becomes available once every Leg 1 fixture is played.</p>', unsafe_allow_html=True)
+
         if st.button("🏁 Complete this league (locks table, tags winner)", type="primary"):
             try:
                 db.complete_league(active_league["id"])
