@@ -168,15 +168,6 @@ h1, h2, h3 { font-family: 'Poppins', sans-serif !important; color: var(--text) !
     padding: 0.6rem 1rem;
     font-size: 1rem;
 }
-
-/* --- footer link --- */
-.footer-link {
-    margin-top: 2.5rem;
-    font-family: 'Inter', sans-serif;
-    color: var(--accent);
-    opacity: 0.9;
-    font-size: 0.95rem;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -214,21 +205,20 @@ def standings_rows(table):
 
 st.markdown('<div class="brand-bar">PES With the Bois</div>', unsafe_allow_html=True)
 
+
 def go_to(page: str):
-    st.session_state["nav_page"] = page
+    st.query_params["page"] = page
 
 
-st.session_state.setdefault("nav_page", "home")
+if "page" not in st.query_params:
+    st.query_params["page"] = "home"
 
-nav_options = list(PAGE_LABELS.keys())
-selected = st.selectbox(
-    "nav", options=nav_options, index=nav_options.index(st.session_state["nav_page"]),
-    format_func=lambda k: f"{PAGE_LABELS[k]}  ▾", label_visibility="collapsed",
-)
-if selected != st.session_state["nav_page"]:
-    st.session_state["nav_page"] = selected
+page_key = st.query_params.get("page", "home")
+if page_key not in PAGE_LABELS:
+    page_key = "home"
 
-page_key = st.session_state["nav_page"]
+if page_key != "home":
+    st.button("← Home", key="home_link", on_click=go_to, args=("home",))
 
 
 # ---------------------------------------------------------------------- Home --
@@ -480,7 +470,3 @@ elif page_key == "admin":
                 db.delete_league(lg["id"])
                 st.success(f"Deleted {lg['name']}.")
                 st.rerun()
-
-
-# ------------------------------------------------------------------- Footer --
-
