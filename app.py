@@ -272,8 +272,7 @@ elif page_key == "fixtures":
 
         if not league["leg2_unlocked"]:
             st.markdown(
-                '<p class="muted">🔒 Leg 2 fixtures are locked until the admin opens them '
-                '(once every Leg 1 match is played).</p>',
+                '<p class="muted">🔒 Leg 2 fixtures are locked, Play all the Leg 1 matches to unlock </p>',
                 unsafe_allow_html=True,
             )
 
