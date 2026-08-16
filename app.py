@@ -381,6 +381,26 @@ elif page_key == "admin":
             except Exception as e:
                 st.error(str(e))
 
+        st.markdown('<p class="section-title" style="font-size: 1rem;">Add a player mid-season</p>', unsafe_allow_html=True)
+        st.markdown('<p class="muted">Slots them in with fresh home & away fixtures against everyone already in the league. Your existing results are untouched.</p>', unsafe_allow_html=True)
+        existing_ids = db.get_league_participant_ids(active_league["id"])
+        approved_active = [p for p in db.list_players(status="approved") if p["active"]]
+        joinable = [p for p in approved_active if p["id"] not in existing_ids]
+        if not joinable:
+            st.markdown('<p class="muted">No approved players left to add — everyone approved is already in this league.</p>', unsafe_allow_html=True)
+        else:
+            new_player_id = st.selectbox(
+                "Player to add", options=[p["id"] for p in joinable],
+                format_func=lambda pid: player_label(next(p for p in joinable if p["id"] == pid)),
+            )
+            if st.button("➕ Add to league"):
+                try:
+                    db.add_player_to_league(active_league["id"], new_player_id)
+                    st.success("Added — fixtures generated against the rest of the league.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(str(e))
+
         st.markdown('<p class="muted">Made a mistake starting this one (wrong players, test league, etc)? Cancel it below instead of completing it — this deletes it with no archive.</p>', unsafe_allow_html=True)
         cancel_confirm = st.checkbox("Confirm cancel — this deletes the league and its fixtures, no undo", key="cancel_active_confirm")
         if st.button("🗑️ Cancel & delete this league", disabled=not cancel_confirm):
@@ -423,4 +443,3 @@ elif page_key == "admin":
 
 
 # ------------------------------------------------------------------- Footer --
-
