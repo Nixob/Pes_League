@@ -170,6 +170,20 @@ h1, h2, h3 { font-family: 'Poppins', sans-serif !important; color: var(--text) !
     padding: 0.6rem 1rem;
     font-size: 1rem;
 }
+
+/* --- bigger toast popups --- */
+div[data-testid="stToast"] {
+    font-size: 1.15rem;
+    padding: 1rem 1.3rem;
+    min-width: 320px;
+}
+div[data-testid="stToast"] p {
+    font-size: 1.1rem !important;
+}
+div[data-testid="stToast"] svg {
+    width: 1.4rem;
+    height: 1.4rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
