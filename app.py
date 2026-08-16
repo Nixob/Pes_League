@@ -187,7 +187,7 @@ def render_table(rows: list[dict]):
 def standings_rows(table):
     return [{
         "#": i + 1,
-        "Player": f"{r['ign']}<span class='club-sub'>{r['club_name']}</span>",
+        "Player": f"{r['club_name']}<span class='club-sub'>{r['ign']}</span>",
         "P": r["played"], "W": r["won"], "D": r["drawn"], "L": r["lost"],
         "GF": r["gf"], "GA": r["ga"], "GD": r["gd"], "Pts": r["points"],
     } for i, r in enumerate(table)]
