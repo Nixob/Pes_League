@@ -128,6 +128,10 @@ table.league-table td.rank { color: var(--accent); font-weight: 600; }
     table.league-table { min-width: 0; width: 100%; font-size: 0.66rem; }
     table.league-table th, table.league-table td { padding: 4px 5px; }
     .club-sub { font-size: 0.78em; }
+
+    /* fixture cards: give inputs/buttons a bit more breathing room */
+    div[data-testid="stNumberInput"] input { padding: 6px 8px; font-size: 0.9rem; }
+    div[data-testid="stVerticalBlockBorderWrapper"] { padding: 0.6rem !important; }
 }
 
 /* --- section headings --- */
@@ -220,16 +224,6 @@ if page_key == "fixtures":
             format_func=lambda pid: "— select your name —" if pid is None else names[pid],
         )
 
-        if me:
-            nxt = db.next_fixture_for_player(league["id"], me)
-            if nxt:
-                st.success(
-                    f"Your next fixture: **{nxt['home_ign']} ({nxt['home_club_name']})** vs "
-                    f"**{nxt['away_ign']} ({nxt['away_club_name']})**  (leg {nxt['leg']})"
-                )
-            else:
-                st.info("You have no unplayed fixtures left — nice, you're done for this cycle.")
-
         st.markdown('<div class="section-title">Fixture list</div>', unsafe_allow_html=True)
         st.markdown('<p class="muted">Tick a fixture once it\'s been played and enter the score.</p>', unsafe_allow_html=True)
 
@@ -242,23 +236,27 @@ if page_key == "fixtures":
             visible_fixtures = fixtures
 
         for f in visible_fixtures:
-            home_label = f"{f['home_ign']}  ({f['home_club_name']})"
-            away_label = f"{f['away_ign']}  ({f['away_club_name']})"
-            cols = st.columns([4, 1, 1, 1, 1])
-            label = f"{home_label}  vs  {away_label}  (leg {f['leg']})"
-
-            if f["played"]:
-                cols[0].markdown(f":green[✅ {label}]  —  **{f['home_score']} – {f['away_score']}**")
-                if cols[4].button("Undo", key=f"undo_{f['id']}"):
-                    db.unmark_result(f["id"])
-                    st.rerun()
-            else:
-                cols[0].markdown(label)
-                hs = cols[1].number_input("H", min_value=0, max_value=20, step=1, key=f"hs_{f['id']}", label_visibility="collapsed")
-                aws = cols[2].number_input("A", min_value=0, max_value=20, step=1, key=f"as_{f['id']}", label_visibility="collapsed")
-                if cols[3].button("✅ Played", key=f"tick_{f['id']}"):
-                    db.submit_result(f["id"], int(hs), int(aws))
-                    st.rerun()
+            with st.container(border=True):
+                st.markdown(
+                    f"**{f['home_ign']}** _{f['home_club_name']}_ &nbsp;vs&nbsp; "
+                    f"**{f['away_ign']}** _{f['away_club_name']}_"
+                    f"  \n<span class='muted' style='font-size:0.78rem;'>Leg {f['leg']}</span>",
+                    unsafe_allow_html=True,
+                )
+                if f["played"]:
+                    c1, c2 = st.columns([3, 1])
+                    c1.markdown(f":green[✅ **{f['home_score']} – {f['away_score']}**]")
+                    if c2.button("Undo", key=f"undo_{f['id']}", use_container_width=True):
+                        db.unmark_result(f["id"])
+                        st.rerun()
+                else:
+                    c1, c2, c3 = st.columns([1, 1, 1.4])
+                    hs = c1.number_input("Home", min_value=0, max_value=20, step=1, key=f"hs_{f['id']}")
+                    aws = c2.number_input("Away", min_value=0, max_value=20, step=1, key=f"as_{f['id']}")
+                    c3.markdown("<div style='height: 1.6rem'></div>", unsafe_allow_html=True)
+                    if c3.button("✅ Tick", key=f"tick_{f['id']}", use_container_width=True):
+                        db.submit_result(f["id"], int(hs), int(aws))
+                        st.rerun()
 
 
 # --------------------------------------------------------------------- Table --
@@ -443,3 +441,10 @@ elif page_key == "admin":
 
 
 # ------------------------------------------------------------------- Footer --
+if page_key == "register":
+    pass
+else:
+    st.markdown(
+        '<div class="footer-link">Not registered yet? Switch the dropdown above to <b>Register</b> ⚽</div>',
+        unsafe_allow_html=True,
+    )
