@@ -135,6 +135,47 @@ def start_new_league(name: str, player_ids: list[str]):
     return league
 
 
+def get_league_participant_ids(league_id: str) -> list[str]:
+    sb = get_client()
+    rows = sb.table("league_participants").select("player_id").eq("league_id", league_id).execute().data
+    return [r["player_id"] for r in rows]
+
+
+def add_player_to_league(league_id: str, player_id: str):
+    """Adds a player to an already-running league. Generates home & away
+    fixtures against everyone currently in the league — existing results
+    are untouched. Doesn't retroactively rebalance the table, it just
+    slots the new player in with fresh fixtures from here on."""
+    existing_ids = get_league_participant_ids(league_id)
+    if player_id in existing_ids:
+        raise ValueError("That player is already in this league.")
+
+    sb = get_client()
+    players = {p["id"]: p for p in list_players()}
+    new_p = players[player_id]
+
+    sb.table("league_participants").insert(
+        {"league_id": league_id, "player_id": player_id}
+    ).execute()
+
+    fixtures_rows = []
+    for other_id in existing_ids:
+        other = players[other_id]
+        fixtures_rows.append({
+            "league_id": league_id, "home_player_id": player_id, "away_player_id": other_id, "leg": 1,
+            "home_club_name": new_p["club_name"], "home_ign": new_p["ign"],
+            "away_club_name": other["club_name"], "away_ign": other["ign"],
+        })
+        fixtures_rows.append({
+            "league_id": league_id, "home_player_id": other_id, "away_player_id": player_id, "leg": 2,
+            "home_club_name": other["club_name"], "home_ign": other["ign"],
+            "away_club_name": new_p["club_name"], "away_ign": new_p["ign"],
+        })
+    if fixtures_rows:
+        sb.table("fixtures").insert(fixtures_rows).execute()
+    return new_p
+
+
 def complete_league(league_id: str):
     """Locks the table, tags the winner, archives the league."""
     table = get_standings(league_id)
