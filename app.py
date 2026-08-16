@@ -9,6 +9,7 @@ PAGE_LABELS = {
     "table": "League Standing",
     "history": "History",
     "register": "Register",
+    "rules": "Rules",
     "admin": "Admin",
 }
 
@@ -17,6 +18,7 @@ PAGE_ICONS = {
     "table": "🏆",
     "history": "📜",
     "register": "➕",
+    "rules": "📋",
     "admin": "🔐",
 }
 
@@ -225,7 +227,7 @@ if page_key != "home":
 if page_key == "home":
     st.markdown('<div style="height: 0.8rem;"></div>', unsafe_allow_html=True)
 
-    tile_rows = [["fixtures", "table"], ["history", "register"], ["admin"]]
+    tile_rows = [["fixtures", "table"], ["history", "register"], ["rules", "admin"]]
     for row in tile_rows:
         cols = st.columns(len(row)) if len(row) > 1 else [st.columns([1, 2, 1])[1]]
         for i, key in enumerate(row):
@@ -339,6 +341,17 @@ elif page_key == "register":
     st.markdown('<div class="section-title">Approved players</div>', unsafe_allow_html=True)
     approved = db.list_players(status="approved")
     render_table([{"Club": p["club_name"], "IGN": p["ign"], "Active": "Yes" if p["active"] else "No"} for p in approved])
+
+
+# --------------------------------------------------------------------- Rules --
+elif page_key == "rules":
+    st.markdown('<div class="section-title">How this works</div>', unsafe_allow_html=True)
+    st.markdown("""
+1. **Register** — enter your club name and IGN, wait for admin approval.
+2. **Check Fixtures** — you don't have to play in order, any fixture on your list can be played whenever.
+3. **After a match, update the score from the Fixtures page** — find your name and your opponent's name, put in the scores, and click **Played**.
+4. **In-game rules** — keep Extra Time and Penalties turned OFF.
+""")
 
 
 # --------------------------------------------------------------------- Admin --
