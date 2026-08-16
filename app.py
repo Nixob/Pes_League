@@ -102,6 +102,13 @@ table.league-table td:nth-child(2) {
     white-space: normal;
     word-break: break-word;
 }
+.club-sub {
+    display: block;
+    font-size: 0.72em;
+    color: var(--muted);
+    font-weight: 400;
+    line-height: 1.3;
+}
 table.league-table th {
     color: var(--accent);
     font-weight: 600;
@@ -118,8 +125,9 @@ table.league-table td.rank { color: var(--accent); font-weight: 600; }
     .brand-bar { font-size: 1.25rem; }
     div[data-testid="stSelectbox"] [data-baseweb="select"] > div { font-size: 1.4rem; }
 
-    table.league-table { min-width: 0; width: 100%; font-size: 0.68rem; }
-    table.league-table th, table.league-table td { padding: 4px 4px; }
+    table.league-table { min-width: 0; width: 100%; font-size: 0.66rem; }
+    table.league-table th, table.league-table td { padding: 4px 5px; }
+    .club-sub { font-size: 0.78em; }
 }
 
 /* --- section headings --- */
@@ -178,7 +186,8 @@ def render_table(rows: list[dict]):
 
 def standings_rows(table):
     return [{
-        "#": i + 1, "IGN": r["ign"],
+        "#": i + 1,
+        "Player": f"{r['ign']}<span class='club-sub'>{r['club_name']}</span>",
         "P": r["played"], "W": r["won"], "D": r["drawn"], "L": r["lost"],
         "GF": r["gf"], "GA": r["ga"], "GD": r["gd"], "Pts": r["points"],
     } for i, r in enumerate(table)]
