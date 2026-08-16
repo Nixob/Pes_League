@@ -256,7 +256,7 @@ if page_key == "fixtures":
                 cols[0].markdown(label)
                 hs = cols[1].number_input("H", min_value=0, max_value=20, step=1, key=f"hs_{f['id']}", label_visibility="collapsed")
                 aws = cols[2].number_input("A", min_value=0, max_value=20, step=1, key=f"as_{f['id']}", label_visibility="collapsed")
-                if cols[3].button("✅ Tick", key=f"tick_{f['id']}"):
+                if cols[3].button("✅ Played", key=f"tick_{f['id']}"):
                     db.submit_result(f["id"], int(hs), int(aws))
                     st.rerun()
 
