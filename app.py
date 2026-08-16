@@ -254,7 +254,7 @@ if page_key == "fixtures":
                     hs = c1.number_input("Home", min_value=0, max_value=20, step=1, key=f"hs_{f['id']}")
                     aws = c2.number_input("Away", min_value=0, max_value=20, step=1, key=f"as_{f['id']}")
                     c3.markdown("<div style='height: 1.6rem'></div>", unsafe_allow_html=True)
-                    if c3.button("✅ Tick", key=f"tick_{f['id']}", use_container_width=True):
+                    if c3.button("✅ Played", key=f"tick_{f['id']}", use_container_width=True):
                         db.submit_result(f["id"], int(hs), int(aws))
                         st.rerun()
 
