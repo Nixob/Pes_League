@@ -4,11 +4,20 @@ import db
 st.set_page_config(page_title="PES With the Bois", page_icon="🟣", layout="wide", initial_sidebar_state="collapsed")
 
 PAGE_LABELS = {
+    "home": "Home",
     "fixtures": "Fixtures",
     "table": "League Standing",
     "history": "History",
     "register": "Register",
     "admin": "Admin",
+}
+
+PAGE_ICONS = {
+    "fixtures": "⚽",
+    "table": "🏆",
+    "history": "📜",
+    "register": "➕",
+    "admin": "🔐",
 }
 
 
@@ -155,6 +164,10 @@ h1, h2, h3 { font-family: 'Poppins', sans-serif !important; color: var(--text) !
     background-color: var(--accent);
     border: none;
 }
+.stButton > button {
+    padding: 0.6rem 1rem;
+    font-size: 1rem;
+}
 
 /* --- footer link --- */
 .footer-link {
@@ -201,14 +214,41 @@ def standings_rows(table):
 
 st.markdown('<div class="brand-bar">PES With the Bois</div>', unsafe_allow_html=True)
 
-page_key = st.selectbox(
-    "nav", options=list(PAGE_LABELS.keys()), index=1,
+def go_to(page: str):
+    st.session_state["nav_page"] = page
+
+
+st.session_state.setdefault("nav_page", "home")
+
+nav_options = list(PAGE_LABELS.keys())
+selected = st.selectbox(
+    "nav", options=nav_options, index=nav_options.index(st.session_state["nav_page"]),
     format_func=lambda k: f"{PAGE_LABELS[k]}  ▾", label_visibility="collapsed",
 )
+if selected != st.session_state["nav_page"]:
+    st.session_state["nav_page"] = selected
+
+page_key = st.session_state["nav_page"]
+
+
+# ---------------------------------------------------------------------- Home --
+if page_key == "home":
+    st.markdown('<div style="height: 0.8rem;"></div>', unsafe_allow_html=True)
+
+    tile_rows = [["fixtures", "table"], ["history", "register"], ["admin"]]
+    for row in tile_rows:
+        cols = st.columns(len(row)) if len(row) > 1 else [st.columns([1, 2, 1])[1]]
+        for i, key in enumerate(row):
+            with cols[i]:
+                with st.container(border=True):
+                    st.button(
+                        f"{PAGE_ICONS[key]}  {PAGE_LABELS[key]}", key=f"tile_{key}",
+                        use_container_width=True, on_click=go_to, args=(key,),
+                    )
 
 
 # ------------------------------------------------------------------ Fixtures --
-if page_key == "fixtures":
+elif page_key == "fixtures":
     league = db.get_active_league()
 
     if not league:
@@ -248,6 +288,7 @@ if page_key == "fixtures":
                     c1.markdown(f":green[✅ **{f['home_score']} – {f['away_score']}**]")
                     if c2.button("Undo", key=f"undo_{f['id']}", use_container_width=True):
                         db.unmark_result(f["id"])
+                        st.toast("Result undone.", icon="↩️")
                         st.rerun()
                 else:
                     c1, c2, c3 = st.columns([1, 1, 1.4])
@@ -256,6 +297,7 @@ if page_key == "fixtures":
                     c3.markdown("<div style='height: 1.6rem'></div>", unsafe_allow_html=True)
                     if c3.button("✅ Played", key=f"tick_{f['id']}", use_container_width=True):
                         db.submit_result(f["id"], int(hs), int(aws))
+                        st.toast(f"Result saved — {int(hs)}–{int(aws)}", icon="✅")
                         st.rerun()
 
 
@@ -441,4 +483,10 @@ elif page_key == "admin":
 
 
 # ------------------------------------------------------------------- Footer --
-
+if page_key in ("register", "home"):
+    pass
+else:
+    st.markdown(
+        '<div class="footer-link">Not registered yet? Switch the dropdown above to <b>Register</b> ⚽</div>',
+        unsafe_allow_html=True,
+    )
