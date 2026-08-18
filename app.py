@@ -321,11 +321,22 @@ elif page_key == "fixtures":
                     unsafe_allow_html=True,
                 )
                 if f["played"]:
-                    c1, c2 = st.columns([3, 1])
-                    c1.markdown(f":green[✅ **{f['home_score']} – {f['away_score']}**]")
-                    if c2.button("Undo", key=f"undo_{f['id']}", use_container_width=True):
-                        db.unmark_result(f["id"])
-                        st.toast("Result undone.", icon="↩️")
+                    confirm_key = f"confirm_undo_{f['id']}"
+                    if st.session_state.get(confirm_key):
+                        st.markdown(f":green[✅ **{f['home_score']} – {f['away_score']}**]")
+                        st.markdown('<p class="muted">Undo this result?</p>', unsafe_allow_html=True)
+                        yc, nc = st.columns(2)
+                        if yc.button("Yes, undo", key=f"undo_yes_{f['id']}", use_container_width=True):
+                            db.unmark_result(f["id"])
+                            st.session_state[confirm_key] = False
+                            st.toast("Result undone.", icon="↩️")
+                        if nc.button("Cancel", key=f"undo_no_{f['id']}", use_container_width=True):
+                            st.session_state[confirm_key] = False
+                    else:
+                        c1, c2 = st.columns([3, 1])
+                        c1.markdown(f":green[✅ **{f['home_score']} – {f['away_score']}**]")
+                        if c2.button("Undo", key=f"undo_{f['id']}", use_container_width=True):
+                            st.session_state[confirm_key] = True
                 elif f["leg"] == 2 and not leg2_unlocked:
                     st.markdown('<p class="muted">🔒 Locked until Leg 1 is complete.</p>', unsafe_allow_html=True)
                 else:
