@@ -209,6 +209,12 @@ def list_fixtures(league_id: str):
         .eq("league_id", league_id).order("leg").execute().data
 
 
+def get_fixture(fixture_id: str):
+    sb = get_client()
+    res = sb.table("fixtures").select("*").eq("id", fixture_id).limit(1).execute().data
+    return res[0] if res else None
+
+
 def leg1_complete(league_id: str) -> bool:
     """True once every Leg 1 fixture in the league has been played."""
     fixtures = list_fixtures(league_id)
