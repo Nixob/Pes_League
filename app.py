@@ -184,6 +184,20 @@ div[data-testid="stToast"] svg {
     width: 1.4rem;
     height: 1.4rem;
 }
+
+/* --- big centered loading overlay for full-page reruns --- */
+div[data-testid="stStatusWidget"] {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) scale(2.4) !important;
+    z-index: 9999 !important;
+    background: rgba(14, 14, 16, 0.92) !important;
+    padding: 1.1rem 1.5rem !important;
+    border-radius: 14px !important;
+    border: 1.5px solid var(--accent) !important;
+    box-shadow: 0 6px 28px rgba(0, 0, 0, 0.5) !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -272,7 +286,8 @@ elif page_key == "fixtures":
 
         if not league["leg2_unlocked"]:
             st.markdown(
-                '<p class="muted">🔒 Leg 2 fixtures are locked, Play all the Leg 1 matches to unlock </p>',
+                '<p class="muted">🔒 Leg 2 fixtures are locked until the admin opens them '
+                '(once every Leg 1 match is played).</p>',
                 unsafe_allow_html=True,
             )
 
@@ -293,7 +308,11 @@ elif page_key == "fixtures":
             wanted_leg = 1 if leg_filter == "Leg 1" else 2
             visible_fixtures = [f for f in visible_fixtures if f["leg"] == wanted_leg]
 
-        for f in visible_fixtures:
+        @st.fragment
+        def render_fixture_card(fixture_id: str, leg2_unlocked: bool):
+            f = db.get_fixture(fixture_id)
+            if f is None:
+                return
             with st.container(border=True):
                 st.markdown(
                     f"**{f['home_ign']}** _{f['home_club_name']}_ &nbsp;vs&nbsp; "
@@ -307,8 +326,7 @@ elif page_key == "fixtures":
                     if c2.button("Undo", key=f"undo_{f['id']}", use_container_width=True):
                         db.unmark_result(f["id"])
                         st.toast("Result undone.", icon="↩️")
-                        st.rerun()
-                elif f["leg"] == 2 and not league["leg2_unlocked"]:
+                elif f["leg"] == 2 and not leg2_unlocked:
                     st.markdown('<p class="muted">🔒 Locked until Leg 1 is complete.</p>', unsafe_allow_html=True)
                 else:
                     c1, c2, c3 = st.columns([1, 1, 1.4])
@@ -318,7 +336,9 @@ elif page_key == "fixtures":
                     if c3.button("✅ Played", key=f"tick_{f['id']}", use_container_width=True):
                         db.submit_result(f["id"], int(hs), int(aws))
                         st.toast(f"Result saved — {int(hs)}–{int(aws)}", icon="✅")
-                        st.rerun()
+
+        for f in visible_fixtures:
+            render_fixture_card(f["id"], league["leg2_unlocked"])
 
 
 # --------------------------------------------------------------------- Table --
