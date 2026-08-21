@@ -4,13 +4,12 @@ so app.py just calls plain Python functions.
 """
 
 import itertools
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 import streamlit as st
 from supabase import create_client, Client
 
 MAX_PLAYERS = 25
-DEADLINE_DAYS = 7
 
 
 @st.cache_resource
@@ -103,10 +102,11 @@ def list_completed_leagues():
     ).eq("status", "completed").order("completed_at", desc=True).execute().data
 
 
-def start_new_league(name: str, player_ids: list[str]):
+def start_new_league(name: str, player_ids: list[str], deadline=None):
     """Creates a league, registers participants, and generates a full
     home & away round-robin fixture list. Player club/IGN are snapshotted
-    onto each fixture at creation time."""
+    onto each fixture at creation time. `deadline` is an optional
+    datetime.date — leave as None to not enforce one."""
     if get_active_league():
         raise ValueError("There's already an active league. Complete it first.")
     if len(player_ids) < 2:
@@ -115,8 +115,11 @@ def start_new_league(name: str, player_ids: list[str]):
     sb = get_client()
     players = {p["id"]: p for p in list_players()}
 
-    league = sb.table("leagues").insert({"name": name.strip(), "status": "active"}) \
-        .execute().data[0]
+    league_row = {"name": name.strip(), "status": "active"}
+    if deadline:
+        league_row["deadline"] = deadline.isoformat()
+
+    league = sb.table("leagues").insert(league_row).execute().data[0]
     league_id = league["id"]
 
     sb.table("league_participants").insert(
@@ -138,6 +141,31 @@ def start_new_league(name: str, player_ids: list[str]):
         })
     sb.table("fixtures").insert(fixtures_rows).execute()
     return league
+
+
+def set_league_deadline(league_id: str, deadline):
+    """deadline: a datetime.date, or None to clear the deadline entirely."""
+    sb = get_client()
+    sb.table("leagues").update(
+        {"deadline": deadline.isoformat() if deadline else None}
+    ).eq("id", league_id).execute()
+
+
+def apply_forfeit(fixture_id: str, winner: str):
+    """Records a 1-0 forfeit result. winner must be 'home' or 'away' —
+    whichever side gets credited with the win. Tagged with forfeit=True
+    so it displays distinctly from a normally-played match."""
+    if winner not in ("home", "away"):
+        raise ValueError("winner must be 'home' or 'away'")
+    home_score, away_score = (1, 0) if winner == "home" else (0, 1)
+    sb = get_client()
+    sb.table("fixtures").update({
+        "played": True,
+        "home_score": home_score,
+        "away_score": away_score,
+        "forfeit": True,
+        "played_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", fixture_id).execute()
 
 
 def get_league_participant_ids(league_id: str) -> list[str]:
@@ -225,10 +253,7 @@ def leg1_complete(league_id: str) -> bool:
 
 def unlock_leg2(league_id: str):
     sb = get_client()
-    return sb.table("leagues").update({
-        "leg2_unlocked": True,
-        "leg2_unlocked_at": datetime.now(timezone.utc).isoformat(),
-    }).eq("id", league_id).execute()
+    return sb.table("leagues").update({"leg2_unlocked": True}).eq("id", league_id).execute()
 
 
 def next_fixture_for_player(league_id: str, player_id: str):
@@ -240,105 +265,28 @@ def next_fixture_for_player(league_id: str, player_id: str):
 
 
 def submit_result(fixture_id: str, home_score: int, away_score: int):
-    """Ticking a fixture as played — this is the 'tick mark' action."""
+    """Ticking a fixture as played — this is the 'tick mark' action.
+    Always clears any forfeit flag, since this is a real submitted result."""
     sb = get_client()
     sb.table("fixtures").update({
         "played": True,
         "home_score": home_score,
         "away_score": away_score,
+        "forfeit": False,
         "played_at": datetime.now(timezone.utc).isoformat(),
-        "is_forfeit": False,
-        "forfeit_player_id": None,
     }).eq("id", fixture_id).execute()
 
 
 def unmark_result(fixture_id: str):
-    """Untick — in case someone fat-fingers a score, or an admin wants to
-    reverse a forfeit call."""
+    """Untick — in case someone fat-fingers a score, or a forfeit needs
+    reversing (e.g. the player showed up after all)."""
     sb = get_client()
     sb.table("fixtures").update({
         "played": False,
         "home_score": None,
         "away_score": None,
+        "forfeit": False,
         "played_at": None,
-        "is_forfeit": False,
-        "forfeit_player_id": None,
-    }).eq("id", fixture_id).execute()
-
-
-# --------------------------------------------------------------- deadlines --
-
-def _parse_ts(value):
-    if not value:
-        return None
-    if isinstance(value, datetime):
-        return value
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
-
-
-def fixture_deadline(fixture: dict, league: dict):
-    """The moment a fixture's 7-day window closes, or None if it isn't
-    playable yet. Leg 1 counts from when the fixture was created; leg 2
-    counts from when the admin actually unlocked leg 2 (since that's when
-    it became playable, not whenever it happened to be generated)."""
-    if fixture["leg"] == 1:
-        start = _parse_ts(fixture.get("created_at"))
-    else:
-        start = _parse_ts(league.get("leg2_unlocked_at")) if league else None
-    if not start:
-        return None
-    return start + timedelta(days=DEADLINE_DAYS)
-
-
-def is_overdue(fixture: dict, league: dict) -> bool:
-    """True if a fixture is unplayed and past its deadline. Purely a
-    visibility flag — nothing automatic happens because of this."""
-    if fixture["played"]:
-        return False
-    deadline = fixture_deadline(fixture, league)
-    if deadline is None:
-        return False
-    return datetime.now(timezone.utc) > deadline
-
-
-def list_overdue_fixtures(league_id: str):
-    """Unplayed, past-deadline fixtures for a league — feeds the admin
-    forfeit panel."""
-    sb = get_client()
-    res = sb.table("leagues").select("*").eq("id", league_id).limit(1).execute().data
-    league = res[0] if res else None
-    if not league:
-        return []
-    fixtures = list_fixtures(league_id)
-    return [f for f in fixtures if is_overdue(f, league)]
-
-
-# ---------------------------------------------------------------- forfeits --
-
-def apply_forfeit(fixture_id: str, forfeiting_player_id: str):
-    """Admin-only call: logs a 1-0 result against the forfeiting player,
-    tagged is_forfeit=True so it's never displayed or mistaken as a real
-    scoreline. Still counts normally toward the table (3 points, GF/GA)."""
-    f = get_fixture(fixture_id)
-    if f is None:
-        raise ValueError("Fixture not found.")
-    if f["played"]:
-        raise ValueError("This fixture already has a result.")
-    if forfeiting_player_id not in (f["home_player_id"], f["away_player_id"]):
-        raise ValueError("That player isn't in this fixture.")
-
-    is_home_forfeiting = forfeiting_player_id == f["home_player_id"]
-    home_score = 0 if is_home_forfeiting else 1
-    away_score = 1 if is_home_forfeiting else 0
-
-    sb = get_client()
-    sb.table("fixtures").update({
-        "played": True,
-        "home_score": home_score,
-        "away_score": away_score,
-        "played_at": datetime.now(timezone.utc).isoformat(),
-        "is_forfeit": True,
-        "forfeit_player_id": forfeiting_player_id,
     }).eq("id", fixture_id).execute()
 
 
@@ -348,8 +296,7 @@ def get_standings(league_id: str):
     """Builds the league table from fixtures' own snapshot names — works
     even if a player has since been deleted. Groups by player_id when the
     live link still exists, otherwise falls back to the snapshotted
-    club+IGN so a deleted player's two legs still combine into one row.
-    Forfeit results count exactly like real results toward points/GF/GA."""
+    club+IGN so a deleted player's two legs still combine into one row."""
     fixtures = list_fixtures(league_id)
     stats = {}
 
