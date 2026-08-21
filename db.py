@@ -4,12 +4,13 @@ so app.py just calls plain Python functions.
 """
 
 import itertools
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import streamlit as st
 from supabase import create_client, Client
 
 MAX_PLAYERS = 25
+DEADLINE_DAYS = 7
 
 
 @st.cache_resource
@@ -224,7 +225,10 @@ def leg1_complete(league_id: str) -> bool:
 
 def unlock_leg2(league_id: str):
     sb = get_client()
-    return sb.table("leagues").update({"leg2_unlocked": True}).eq("id", league_id).execute()
+    return sb.table("leagues").update({
+        "leg2_unlocked": True,
+        "leg2_unlocked_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", league_id).execute()
 
 
 def next_fixture_for_player(league_id: str, player_id: str):
@@ -243,17 +247,98 @@ def submit_result(fixture_id: str, home_score: int, away_score: int):
         "home_score": home_score,
         "away_score": away_score,
         "played_at": datetime.now(timezone.utc).isoformat(),
+        "is_forfeit": False,
+        "forfeit_player_id": None,
     }).eq("id", fixture_id).execute()
 
 
 def unmark_result(fixture_id: str):
-    """Untick — in case someone fat-fingers a score."""
+    """Untick — in case someone fat-fingers a score, or an admin wants to
+    reverse a forfeit call."""
     sb = get_client()
     sb.table("fixtures").update({
         "played": False,
         "home_score": None,
         "away_score": None,
         "played_at": None,
+        "is_forfeit": False,
+        "forfeit_player_id": None,
+    }).eq("id", fixture_id).execute()
+
+
+# --------------------------------------------------------------- deadlines --
+
+def _parse_ts(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def fixture_deadline(fixture: dict, league: dict):
+    """The moment a fixture's 7-day window closes, or None if it isn't
+    playable yet. Leg 1 counts from when the fixture was created; leg 2
+    counts from when the admin actually unlocked leg 2 (since that's when
+    it became playable, not whenever it happened to be generated)."""
+    if fixture["leg"] == 1:
+        start = _parse_ts(fixture.get("created_at"))
+    else:
+        start = _parse_ts(league.get("leg2_unlocked_at")) if league else None
+    if not start:
+        return None
+    return start + timedelta(days=DEADLINE_DAYS)
+
+
+def is_overdue(fixture: dict, league: dict) -> bool:
+    """True if a fixture is unplayed and past its deadline. Purely a
+    visibility flag — nothing automatic happens because of this."""
+    if fixture["played"]:
+        return False
+    deadline = fixture_deadline(fixture, league)
+    if deadline is None:
+        return False
+    return datetime.now(timezone.utc) > deadline
+
+
+def list_overdue_fixtures(league_id: str):
+    """Unplayed, past-deadline fixtures for a league — feeds the admin
+    forfeit panel."""
+    sb = get_client()
+    res = sb.table("leagues").select("*").eq("id", league_id).limit(1).execute().data
+    league = res[0] if res else None
+    if not league:
+        return []
+    fixtures = list_fixtures(league_id)
+    return [f for f in fixtures if is_overdue(f, league)]
+
+
+# ---------------------------------------------------------------- forfeits --
+
+def apply_forfeit(fixture_id: str, forfeiting_player_id: str):
+    """Admin-only call: logs a 1-0 result against the forfeiting player,
+    tagged is_forfeit=True so it's never displayed or mistaken as a real
+    scoreline. Still counts normally toward the table (3 points, GF/GA)."""
+    f = get_fixture(fixture_id)
+    if f is None:
+        raise ValueError("Fixture not found.")
+    if f["played"]:
+        raise ValueError("This fixture already has a result.")
+    if forfeiting_player_id not in (f["home_player_id"], f["away_player_id"]):
+        raise ValueError("That player isn't in this fixture.")
+
+    is_home_forfeiting = forfeiting_player_id == f["home_player_id"]
+    home_score = 0 if is_home_forfeiting else 1
+    away_score = 1 if is_home_forfeiting else 0
+
+    sb = get_client()
+    sb.table("fixtures").update({
+        "played": True,
+        "home_score": home_score,
+        "away_score": away_score,
+        "played_at": datetime.now(timezone.utc).isoformat(),
+        "is_forfeit": True,
+        "forfeit_player_id": forfeiting_player_id,
     }).eq("id", fixture_id).execute()
 
 
@@ -263,7 +348,8 @@ def get_standings(league_id: str):
     """Builds the league table from fixtures' own snapshot names — works
     even if a player has since been deleted. Groups by player_id when the
     live link still exists, otherwise falls back to the snapshotted
-    club+IGN so a deleted player's two legs still combine into one row."""
+    club+IGN so a deleted player's two legs still combine into one row.
+    Forfeit results count exactly like real results toward points/GF/GA."""
     fixtures = list_fixtures(league_id)
     stats = {}
 
