@@ -156,6 +156,19 @@ h1, h2, h3 { font-family: 'Poppins', sans-serif !important; color: var(--text) !
 }
 .muted { color: var(--muted); font-size: 0.9rem; }
 
+/* --- overdue badge --- */
+.overdue-badge {
+    display: inline-block;
+    color: #ff9d3d;
+    background: rgba(255, 157, 61, 0.12);
+    border: 1px solid rgba(255, 157, 61, 0.4);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-top: 6px;
+}
+
 /* --- buttons --- */
 .stButton > button {
     border-radius: 8px;
@@ -294,7 +307,12 @@ elif page_key == "fixtures":
         leg_filter = st.radio("View", options=["All", "Leg 1", "Leg 2"], horizontal=True, label_visibility="collapsed")
 
         st.markdown('<div class="section-title">Fixture list</div>', unsafe_allow_html=True)
-        st.markdown('<p class="muted">Tick a fixture once it\'s been played and enter the score.</p>', unsafe_allow_html=True)
+        st.markdown(
+            '<p class="muted">Tick a fixture once it\'s been played and enter the score. '
+            'Fixtures get a 7-day window once they\'re playable — an ⏰ Overdue badge shows up '
+            'if that passes with nothing entered; the admin decides from there.</p>',
+            unsafe_allow_html=True,
+        )
 
         if me:
             show_all = st.checkbox("Show everyone's fixtures instead of just mine")
@@ -309,7 +327,7 @@ elif page_key == "fixtures":
             visible_fixtures = [f for f in visible_fixtures if f["leg"] == wanted_leg]
 
         @st.fragment
-        def render_fixture_card(fixture_id: str, leg2_unlocked: bool):
+        def render_fixture_card(fixture_id: str, league: dict):
             f = db.get_fixture(fixture_id)
             if f is None:
                 return
@@ -322,8 +340,19 @@ elif page_key == "fixtures":
                 )
                 if f["played"]:
                     confirm_key = f"confirm_undo_{f['id']}"
+                    if f.get("is_forfeit"):
+                        forfeiter = (
+                            f["home_ign"] if f["forfeit_player_id"] == f["home_player_id"] else f["away_ign"]
+                        )
+                        score_line = (
+                            f":orange[🚩 **{f['home_score']} – {f['away_score']}** "
+                            f"— forfeit ({forfeiter} didn't play)]"
+                        )
+                    else:
+                        score_line = f":green[✅ **{f['home_score']} – {f['away_score']}**]"
+
                     if st.session_state.get(confirm_key):
-                        st.markdown(f":green[✅ **{f['home_score']} – {f['away_score']}**]")
+                        st.markdown(score_line)
                         st.markdown('<p class="muted">Undo this result?</p>', unsafe_allow_html=True)
                         yc, nc = st.columns(2)
                         if yc.button("Yes, undo", key=f"undo_yes_{f['id']}", use_container_width=True):
@@ -334,12 +363,14 @@ elif page_key == "fixtures":
                             st.session_state[confirm_key] = False
                     else:
                         c1, c2 = st.columns([3, 1])
-                        c1.markdown(f":green[✅ **{f['home_score']} – {f['away_score']}**]")
+                        c1.markdown(score_line)
                         if c2.button("Undo", key=f"undo_{f['id']}", use_container_width=True):
                             st.session_state[confirm_key] = True
-                elif f["leg"] == 2 and not leg2_unlocked:
+                elif f["leg"] == 2 and not league["leg2_unlocked"]:
                     st.markdown('<p class="muted">🔒 Locked until Leg 1 is complete.</p>', unsafe_allow_html=True)
                 else:
+                    if db.is_overdue(f, league):
+                        st.markdown('<span class="overdue-badge">⏰ Overdue</span>', unsafe_allow_html=True)
                     c1, c2, c3 = st.columns([1, 1, 1.4])
                     hs = c1.number_input("Home", min_value=0, max_value=20, step=1, key=f"hs_{f['id']}")
                     aws = c2.number_input("Away", min_value=0, max_value=20, step=1, key=f"as_{f['id']}")
@@ -349,7 +380,7 @@ elif page_key == "fixtures":
                         st.toast(f"Result saved — {int(hs)}–{int(aws)}", icon="✅")
 
         for f in visible_fixtures:
-            render_fixture_card(f["id"], league["leg2_unlocked"])
+            render_fixture_card(f["id"], league)
 
 
 # --------------------------------------------------------------------- Table --
@@ -410,6 +441,7 @@ elif page_key == "rules":
 2. **Check Fixtures** — you don't have to play in order, any fixture on your list can be played whenever.
 3. **After a match, update the score from the Fixtures page** — find your name and your opponent's name, put in the scores, and click **Played**.
 4. **In-game rules** — keep Extra Time and Penalties turned OFF.
+5. **Deadlines** — once a fixture is playable, you've got 7 days before it shows as overdue. If it stays unplayed, the admin may apply a forfeit.
 """)
 
 
@@ -475,6 +507,40 @@ elif page_key == "admin":
 
     if active_league:
         st.write(f"Active league: **{active_league['name']}**")
+
+        st.markdown('<p class="section-title" style="font-size: 1rem;">⏰ Overdue fixtures</p>', unsafe_allow_html=True)
+        overdue = db.list_overdue_fixtures(active_league["id"])
+        if not overdue:
+            st.markdown('<p class="muted">Nothing overdue right now.</p>', unsafe_allow_html=True)
+        else:
+            st.markdown(
+                '<p class="muted">Past their 7-day window with no result. You already know the real '
+                'story from the GC — pick who forfeits, or just leave it if it\'s genuinely still in '
+                'progress. Nothing here happens automatically.</p>',
+                unsafe_allow_html=True,
+            )
+            for f in overdue:
+                with st.container(border=True):
+                    st.markdown(
+                        f"**{f['home_ign']}** _{f['home_club_name']}_ &nbsp;vs&nbsp; "
+                        f"**{f['away_ign']}** _{f['away_club_name']}_"
+                        f"  \n<span class='muted' style='font-size:0.78rem;'>Leg {f['leg']} — overdue</span>",
+                        unsafe_allow_html=True,
+                    )
+                    forfeit_choice = st.radio(
+                        "Who forfeits?",
+                        options=[f["home_player_id"], f["away_player_id"]],
+                        format_func=lambda pid: f["home_ign"] if pid == f["home_player_id"] else f["away_ign"],
+                        key=f"forfeit_choice_{f['id']}",
+                        horizontal=True,
+                    )
+                    if st.button("🚩 Apply forfeit (logs 1–0)", key=f"forfeit_apply_{f['id']}"):
+                        try:
+                            db.apply_forfeit(f["id"], forfeit_choice)
+                            st.success("Forfeit logged.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(str(e))
 
         st.markdown('<p class="section-title" style="font-size: 1rem;">Leg 2 lock</p>', unsafe_allow_html=True)
         if active_league["leg2_unlocked"]:
