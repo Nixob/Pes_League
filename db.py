@@ -182,6 +182,35 @@ def apply_forfeit(fixture_id: str, outcome: str):
     }).eq("id", fixture_id).execute()
 
 
+def auto_resolve_leg(league_id: str, leg: int) -> int:
+    """Scans every still-unplayed fixture in the given leg and resolves
+    it automatically: whichever side has played FEWER matches in this
+    leg so far gets a 1-0 forfeit loss (they're the more likely no-show).
+    Equal counts become a 1-1 forfeit draw, since there's no fair way to
+    pick a loser. Safe to call repeatedly — once nothing's unplayed for
+    that leg, it's a no-op. Returns how many fixtures got resolved."""
+    fixtures = list_fixtures(league_id)
+    leg_fixtures = [f for f in fixtures if f["leg"] == leg]
+
+    played_count: dict[str, int] = {}
+    for f in leg_fixtures:
+        if f["played"]:
+            played_count[f["home_player_id"]] = played_count.get(f["home_player_id"], 0) + 1
+            played_count[f["away_player_id"]] = played_count.get(f["away_player_id"], 0) + 1
+
+    unplayed = [f for f in leg_fixtures if not f["played"]]
+    for f in unplayed:
+        hc = played_count.get(f["home_player_id"], 0)
+        ac = played_count.get(f["away_player_id"], 0)
+        if hc == ac:
+            apply_forfeit(f["id"], "draw")
+        elif hc < ac:
+            apply_forfeit(f["id"], "away")   # home played fewer matches -> home loses
+        else:
+            apply_forfeit(f["id"], "home")   # away played fewer matches -> away loses
+    return len(unplayed)
+
+
 def get_league_participant_ids(league_id: str) -> list[str]:
     sb = get_client()
     rows = sb.table("league_participants").select("player_id").eq("league_id", league_id).execute().data
