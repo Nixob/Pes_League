@@ -310,7 +310,7 @@ elif page_key == "fixtures":
             if leg1_closed:
                 st.markdown(
                     f'<p class="muted">⏰ Leg 1 deadline was <b>{deadline_date.strftime("%d %b %Y")}</b> — '
-                    f'Leg 1 is now closed, results can only be corrected by the admin.</p>',
+                    f'Leg 1 is now closed.</p>',
                     unsafe_allow_html=True,
                 )
             else:
@@ -322,7 +322,7 @@ elif page_key == "fixtures":
             if leg2_closed:
                 st.markdown(
                     f'<p class="muted">⏰ Leg 2 deadline was <b>{leg2_deadline_date.strftime("%d %b %Y")}</b> — '
-                    f'Leg 2 is now closed, results can only be corrected by the admin.</p>',
+                    f'Leg 2 is now closed.</p>',
                     unsafe_allow_html=True,
                 )
             else:
