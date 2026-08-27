@@ -102,11 +102,12 @@ def list_completed_leagues():
     ).eq("status", "completed").order("completed_at", desc=True).execute().data
 
 
-def start_new_league(name: str, player_ids: list[str], deadline=None):
+def start_new_league(name: str, player_ids: list[str], deadline=None, leg2_deadline=None):
     """Creates a league, registers participants, and generates a full
     home & away round-robin fixture list. Player club/IGN are snapshotted
-    onto each fixture at creation time. `deadline` is an optional
-    datetime.date — leave as None to not enforce one."""
+    onto each fixture at creation time. `deadline` (Leg 1) and
+    `leg2_deadline` are optional datetime.date values — leave as None to
+    not enforce one. They're independent since Leg 2 unlocks later."""
     if get_active_league():
         raise ValueError("There's already an active league. Complete it first.")
     if len(player_ids) < 2:
@@ -118,6 +119,8 @@ def start_new_league(name: str, player_ids: list[str], deadline=None):
     league_row = {"name": name.strip(), "status": "active"}
     if deadline:
         league_row["deadline"] = deadline.isoformat()
+    if leg2_deadline:
+        league_row["leg2_deadline"] = leg2_deadline.isoformat()
 
     league = sb.table("leagues").insert(league_row).execute().data[0]
     league_id = league["id"]
@@ -144,20 +147,31 @@ def start_new_league(name: str, player_ids: list[str], deadline=None):
 
 
 def set_league_deadline(league_id: str, deadline):
-    """deadline: a datetime.date, or None to clear the deadline entirely."""
+    """Sets/clears the Leg 1 deadline. deadline: a datetime.date, or None to clear."""
     sb = get_client()
     sb.table("leagues").update(
         {"deadline": deadline.isoformat() if deadline else None}
     ).eq("id", league_id).execute()
 
 
-def apply_forfeit(fixture_id: str, winner: str):
-    """Records a 1-0 forfeit result. winner must be 'home' or 'away' —
-    whichever side gets credited with the win. Tagged with forfeit=True
-    so it displays distinctly from a normally-played match."""
-    if winner not in ("home", "away"):
-        raise ValueError("winner must be 'home' or 'away'")
-    home_score, away_score = (1, 0) if winner == "home" else (0, 1)
+def set_league_leg2_deadline(league_id: str, deadline):
+    """Sets/clears the Leg 2 deadline. deadline: a datetime.date, or None to clear."""
+    sb = get_client()
+    sb.table("leagues").update(
+        {"leg2_deadline": deadline.isoformat() if deadline else None}
+    ).eq("id", league_id).execute()
+
+
+def apply_forfeit(fixture_id: str, outcome: str):
+    """Records a forfeit result. outcome is 'home' or 'away' for a 1-0
+    win to that side, or 'draw' for a 1-1 no-fault result (useful when
+    it's genuinely unclear who's more at fault for the missed match).
+    Tagged with forfeit=True so it displays distinctly from a normally-
+    played match."""
+    if outcome not in ("home", "away", "draw"):
+        raise ValueError("outcome must be 'home', 'away', or 'draw'")
+    scores = {"home": (1, 0), "away": (0, 1), "draw": (1, 1)}
+    home_score, away_score = scores[outcome]
     sb = get_client()
     sb.table("fixtures").update({
         "played": True,
