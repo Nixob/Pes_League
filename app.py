@@ -496,7 +496,7 @@ elif page_key == "admin":
     if active_league:
         st.write(f"Active league: **{active_league['name']}**")
 
-        st.markdown('<p class="section-title" style="font-size: 1rem;">Deadline</p>', unsafe_allow_html=True)
+        st.markdown('<p class="section-title" style="font-size: 1rem;">Leg 1 deadline</p>', unsafe_allow_html=True)
         raw_deadline = active_league.get("deadline")
         current_deadline_date = date.fromisoformat(raw_deadline) if raw_deadline else None
         deadline_passed = current_deadline_date is not None and date.today() > current_deadline_date
@@ -505,22 +505,52 @@ elif page_key == "admin":
             if deadline_passed:
                 st.markdown(
                     f'<p class="muted">⏰ Deadline was <b>{current_deadline_date.strftime("%d %b %Y")}</b> — passed. '
-                    f'Overdue fixtures can be forfeited below.</p>', unsafe_allow_html=True,
+                    f'Overdue Leg 1 fixtures can be forfeited below.</p>', unsafe_allow_html=True,
                 )
             else:
                 st.markdown(f'<p class="muted">Deadline: <b>{current_deadline_date.strftime("%d %b %Y")}</b></p>', unsafe_allow_html=True)
         else:
-            st.markdown('<p class="muted">No deadline set for this league — forfeits are off until you set one.</p>', unsafe_allow_html=True)
+            st.markdown('<p class="muted">No Leg 1 deadline set — forfeits for Leg 1 are off until you set one.</p>', unsafe_allow_html=True)
 
-        new_deadline = st.date_input("Set / change deadline", value=current_deadline_date or date.today(), key="deadline_input")
+        new_deadline = st.date_input("Set / change Leg 1 deadline", value=current_deadline_date or date.today(), key="deadline_input")
         dc1, dc2 = st.columns(2)
-        if dc1.button("Update deadline", use_container_width=True):
+        if dc1.button("Update Leg 1 deadline", use_container_width=True):
             db.set_league_deadline(active_league["id"], new_deadline)
-            st.success("Deadline updated.")
+            st.success("Leg 1 deadline updated.")
             st.rerun()
-        if dc2.button("Clear deadline", use_container_width=True, disabled=not current_deadline_date):
+        if dc2.button("Clear Leg 1 deadline", use_container_width=True, disabled=not current_deadline_date):
             db.set_league_deadline(active_league["id"], None)
-            st.success("Deadline cleared.")
+            st.success("Leg 1 deadline cleared.")
+            st.rerun()
+
+        st.markdown('<p class="section-title" style="font-size: 1rem;">Leg 2 deadline</p>', unsafe_allow_html=True)
+        raw_leg2_deadline = active_league.get("leg2_deadline")
+        current_leg2_deadline_date = date.fromisoformat(raw_leg2_deadline) if raw_leg2_deadline else None
+        leg2_deadline_passed = current_leg2_deadline_date is not None and date.today() > current_leg2_deadline_date
+
+        if not active_league["leg2_unlocked"]:
+            st.markdown('<p class="muted">Leg 2 is still locked — you can set a deadline now, but it only makes sense once Leg 2 opens up.</p>', unsafe_allow_html=True)
+
+        if current_leg2_deadline_date:
+            if leg2_deadline_passed:
+                st.markdown(
+                    f'<p class="muted">⏰ Deadline was <b>{current_leg2_deadline_date.strftime("%d %b %Y")}</b> — passed. '
+                    f'Overdue Leg 2 fixtures can be forfeited below.</p>', unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(f'<p class="muted">Deadline: <b>{current_leg2_deadline_date.strftime("%d %b %Y")}</b></p>', unsafe_allow_html=True)
+        else:
+            st.markdown('<p class="muted">No Leg 2 deadline set — forfeits for Leg 2 are off until you set one.</p>', unsafe_allow_html=True)
+
+        new_leg2_deadline = st.date_input("Set / change Leg 2 deadline", value=current_leg2_deadline_date or date.today(), key="leg2_deadline_admin_input")
+        lc1, lc2 = st.columns(2)
+        if lc1.button("Update Leg 2 deadline", use_container_width=True):
+            db.set_league_leg2_deadline(active_league["id"], new_leg2_deadline)
+            st.success("Leg 2 deadline updated.")
+            st.rerun()
+        if lc2.button("Clear Leg 2 deadline", use_container_width=True, disabled=not current_leg2_deadline_date):
+            db.set_league_leg2_deadline(active_league["id"], None)
+            st.success("Leg 2 deadline cleared.")
             st.rerun()
 
         st.markdown('<p class="section-title" style="font-size: 1rem;">Leg 2 lock</p>', unsafe_allow_html=True)
@@ -568,26 +598,33 @@ elif page_key == "admin":
                     st.error(str(e))
 
         st.markdown('<p class="section-title" style="font-size: 1rem;">Forfeits</p>', unsafe_allow_html=True)
-        if not current_deadline_date:
-            st.markdown('<p class="muted">Set a deadline above to enable forfeits.</p>', unsafe_allow_html=True)
-        elif not deadline_passed:
-            st.markdown('<p class="muted">Deadline hasn\'t passed yet — nothing to forfeit.</p>', unsafe_allow_html=True)
+        if not deadline_passed and not leg2_deadline_passed:
+            st.markdown('<p class="muted">No deadline has passed yet — nothing to forfeit.</p>', unsafe_allow_html=True)
         else:
-            overdue = [f for f in db.list_fixtures(active_league["id"]) if not f["played"]]
+            all_fixtures = db.list_fixtures(active_league["id"])
+            overdue = [
+                f for f in all_fixtures if not f["played"] and (
+                    (f["leg"] == 1 and deadline_passed) or (f["leg"] == 2 and leg2_deadline_passed)
+                )
+            ]
             if not overdue:
-                st.markdown('<p class="muted">No unplayed fixtures left — nothing to forfeit.</p>', unsafe_allow_html=True)
+                st.markdown('<p class="muted">No overdue unplayed fixtures right now.</p>', unsafe_allow_html=True)
             else:
                 for f in overdue:
                     with st.expander(f"⏰ {f['home_ign']} vs {f['away_ign']}  (Leg {f['leg']})"):
-                        winner_choice = st.radio(
-                            "Who gets the 1-0 forfeit win?",
-                            options=["home", "away"],
-                            format_func=lambda w, f=f: f"{f['home_ign']} ({f['home_club_name']})" if w == "home" else f"{f['away_ign']} ({f['away_club_name']})",
+                        outcome_choice = st.radio(
+                            "Outcome",
+                            options=["home", "draw", "away"],
+                            format_func=lambda w, f=f: (
+                                f"{f['home_ign']} ({f['home_club_name']}) wins 1-0" if w == "home"
+                                else "Draw 1-1 — no forfeit loser" if w == "draw"
+                                else f"{f['away_ign']} ({f['away_club_name']}) wins 1-0"
+                            ),
                             key=f"forfeit_choice_{f['id']}",
                         )
-                        if st.button("Apply forfeit (1-0)", key=f"forfeit_apply_{f['id']}"):
-                            db.apply_forfeit(f["id"], winner_choice)
-                            st.success("Forfeit applied.")
+                        if st.button("Apply result", key=f"forfeit_apply_{f['id']}"):
+                            db.apply_forfeit(f["id"], outcome_choice)
+                            st.success("Forfeit result applied.")
                             st.rerun()
 
         st.markdown('<p class="muted">Made a mistake starting this one (wrong players, test league, etc)? Cancel it below instead of completing it — this deletes it with no archive.</p>', unsafe_allow_html=True)
@@ -605,17 +642,24 @@ elif page_key == "admin":
         )
         league_name = st.text_input("League name", value="Season 1")
 
-        set_deadline = st.checkbox("Set a deadline for all matches (missed ones can be forfeited)")
+        set_deadline = st.checkbox("Set a Leg 1 deadline (missed matches can be forfeited)")
         deadline_val = None
         if set_deadline:
-            deadline_val = st.date_input("Deadline date", min_value=date.today())
+            deadline_val = st.date_input("Leg 1 deadline date", min_value=date.today(), key="leg1_deadline_input")
+
+        set_leg2_deadline = st.checkbox("Set a Leg 2 deadline too")
+        leg2_deadline_val = None
+        if set_leg2_deadline:
+            leg2_min = deadline_val if deadline_val else date.today()
+            leg2_deadline_val = st.date_input("Leg 2 deadline date", min_value=leg2_min, key="leg2_deadline_input")
+            st.markdown('<p class="muted">You can always set or adjust this later once Leg 2 actually unlocks.</p>', unsafe_allow_html=True)
 
         if st.button("🚀 Start league", type="primary"):
             if len(chosen) < 2:
                 st.error("Pick at least 2 players.")
             else:
                 try:
-                    db.start_new_league(league_name, chosen, deadline=deadline_val)
+                    db.start_new_league(league_name, chosen, deadline=deadline_val, leg2_deadline=leg2_deadline_val)
                     st.success("League started — fixtures generated.")
                     st.rerun()
                 except Exception as e:
