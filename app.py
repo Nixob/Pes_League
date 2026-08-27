@@ -252,6 +252,29 @@ if page_key != "home":
     st.button("← Home", key="home_link", on_click=go_to, args=("home",))
 
 
+def leg_deadline_passed(league, leg: int) -> bool:
+    raw = league.get("deadline") if leg == 1 else league.get("leg2_deadline")
+    return bool(raw) and date.today() > date.fromisoformat(raw)
+
+
+def maybe_auto_resolve():
+    """Runs on every page load. If a leg's deadline has passed and it
+    still has unplayed fixtures, auto-resolves them (see auto_resolve_leg)
+    and lets the admin know via a toast. Cheap no-op once everything's
+    already resolved, so it's safe to call unconditionally like this."""
+    league = db.get_active_league()
+    if not league:
+        return
+    for leg in (1, 2):
+        if leg_deadline_passed(league, leg):
+            resolved = db.auto_resolve_leg(league["id"], leg)
+            if resolved:
+                st.toast(f"⏰ Auto-resolved {resolved} overdue Leg {leg} fixture(s).", icon="🤖")
+
+
+maybe_auto_resolve()
+
+
 # ---------------------------------------------------------------------- Home --
 if page_key == "home":
     st.markdown('<div style="height: 0.8rem;"></div>', unsafe_allow_html=True)
@@ -278,16 +301,32 @@ elif page_key == "fixtures":
         st.markdown(f'<div class="section-title">{league["name"]}</div>', unsafe_allow_html=True)
         fixtures = db.list_fixtures(league["id"])
 
+        leg1_closed = leg_deadline_passed(league, 1)
+        leg2_closed = leg_deadline_passed(league, 2)
+
         raw_deadline = league.get("deadline")
         if raw_deadline:
             deadline_date = date.fromisoformat(raw_deadline)
-            if date.today() > deadline_date:
+            if leg1_closed:
                 st.markdown(
-                    f'<p class="muted">⏰ Deadline was <b>{deadline_date.strftime("%d %b %Y")}</b> — overdue matches may get forfeited by the admin.</p>',
+                    f'<p class="muted">⏰ Leg 1 deadline was <b>{deadline_date.strftime("%d %b %Y")}</b> — '
+                    f'Leg 1 is now closed, results can only be corrected by the admin.</p>',
                     unsafe_allow_html=True,
                 )
             else:
-                st.markdown(f'<p class="muted">⏳ Deadline: <b>{deadline_date.strftime("%d %b %Y")}</b> — get your matches in before then.</p>', unsafe_allow_html=True)
+                st.markdown(f'<p class="muted">⏳ Leg 1 deadline: <b>{deadline_date.strftime("%d %b %Y")}</b></p>', unsafe_allow_html=True)
+
+        raw_leg2_deadline = league.get("leg2_deadline")
+        if raw_leg2_deadline:
+            leg2_deadline_date = date.fromisoformat(raw_leg2_deadline)
+            if leg2_closed:
+                st.markdown(
+                    f'<p class="muted">⏰ Leg 2 deadline was <b>{leg2_deadline_date.strftime("%d %b %Y")}</b> — '
+                    f'Leg 2 is now closed, results can only be corrected by the admin.</p>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(f'<p class="muted">⏳ Leg 2 deadline: <b>{leg2_deadline_date.strftime("%d %b %Y")}</b></p>', unsafe_allow_html=True)
 
         approved_players = [p for p in db.list_players(status="approved") if p["active"]]
         names = {p["id"]: player_label(p) for p in approved_players}
@@ -321,7 +360,7 @@ elif page_key == "fixtures":
             visible_fixtures = [f for f in visible_fixtures if f["leg"] == wanted_leg]
 
         @st.fragment
-        def render_fixture_card(fixture_id: str, leg2_unlocked: bool, deadline_passed: bool):
+        def render_fixture_card(fixture_id: str, leg2_unlocked: bool, leg_closed: bool):
             f = db.get_fixture(fixture_id)
             if f is None:
                 return
@@ -329,7 +368,7 @@ elif page_key == "fixtures":
                 leg_tag = f"Leg {f['leg']}"
                 if f["played"] and f.get("forfeit"):
                     leg_tag += "  ·  🚩 Forfeit"
-                elif not f["played"] and deadline_passed:
+                elif not f["played"] and leg_closed:
                     leg_tag += "  ·  ⏰ Overdue"
                 st.markdown(
                     f"**{f['home_ign']}** _{f['home_club_name']}_ &nbsp;vs&nbsp; "
@@ -338,24 +377,30 @@ elif page_key == "fixtures":
                     unsafe_allow_html=True,
                 )
                 if f["played"]:
-                    confirm_key = f"confirm_undo_{f['id']}"
-                    if st.session_state.get(confirm_key):
+                    if leg_closed:
                         st.markdown(f":green[✅ **{f['home_score']} – {f['away_score']}**]")
-                        st.markdown('<p class="muted">Undo this result?</p>', unsafe_allow_html=True)
-                        yc, nc = st.columns(2)
-                        if yc.button("Yes, undo", key=f"undo_yes_{f['id']}", use_container_width=True):
-                            db.unmark_result(f["id"])
-                            st.session_state[confirm_key] = False
-                            st.toast("Result undone.", icon="↩️")
-                        if nc.button("Cancel", key=f"undo_no_{f['id']}", use_container_width=True):
-                            st.session_state[confirm_key] = False
+                        st.markdown('<p class="muted">🔒 Leg closed — only the admin can change this now.</p>', unsafe_allow_html=True)
                     else:
-                        c1, c2 = st.columns([3, 1])
-                        c1.markdown(f":green[✅ **{f['home_score']} – {f['away_score']}**]")
-                        if c2.button("Undo", key=f"undo_{f['id']}", use_container_width=True):
-                            st.session_state[confirm_key] = True
+                        confirm_key = f"confirm_undo_{f['id']}"
+                        if st.session_state.get(confirm_key):
+                            st.markdown(f":green[✅ **{f['home_score']} – {f['away_score']}**]")
+                            st.markdown('<p class="muted">Undo this result?</p>', unsafe_allow_html=True)
+                            yc, nc = st.columns(2)
+                            if yc.button("Yes, undo", key=f"undo_yes_{f['id']}", use_container_width=True):
+                                db.unmark_result(f["id"])
+                                st.session_state[confirm_key] = False
+                                st.toast("Result undone.", icon="↩️")
+                            if nc.button("Cancel", key=f"undo_no_{f['id']}", use_container_width=True):
+                                st.session_state[confirm_key] = False
+                        else:
+                            c1, c2 = st.columns([3, 1])
+                            c1.markdown(f":green[✅ **{f['home_score']} – {f['away_score']}**]")
+                            if c2.button("Undo", key=f"undo_{f['id']}", use_container_width=True):
+                                st.session_state[confirm_key] = True
                 elif f["leg"] == 2 and not leg2_unlocked:
                     st.markdown('<p class="muted">🔒 Locked until Leg 1 is complete.</p>', unsafe_allow_html=True)
+                elif leg_closed:
+                    st.markdown('<p class="muted">🔒 Leg closed — this will be auto-resolved shortly, or fixed by the admin.</p>', unsafe_allow_html=True)
                 else:
                     c1, c2, c3 = st.columns([1, 1, 1.4])
                     hs = c1.number_input("Home", min_value=0, max_value=20, step=1, key=f"hs_{f['id']}")
@@ -365,11 +410,10 @@ elif page_key == "fixtures":
                         db.submit_result(f["id"], int(hs), int(aws))
                         st.toast(f"Result saved — {int(hs)}–{int(aws)}", icon="✅")
 
-        raw_deadline_for_cards = league.get("deadline")
-        deadline_has_passed = bool(raw_deadline_for_cards) and date.today() > date.fromisoformat(raw_deadline_for_cards)
 
         for f in visible_fixtures:
-            render_fixture_card(f["id"], league["leg2_unlocked"], deadline_has_passed)
+            fixture_leg_closed = leg1_closed if f["leg"] == 1 else leg2_closed
+            render_fixture_card(f["id"], league["leg2_unlocked"], fixture_leg_closed)
 
 
 # --------------------------------------------------------------------- Table --
@@ -598,6 +642,7 @@ elif page_key == "admin":
                     st.error(str(e))
 
         st.markdown('<p class="section-title" style="font-size: 1rem;">Forfeits</p>', unsafe_allow_html=True)
+        st.markdown('<p class="muted">Overdue matches now get auto-resolved (fewer matches played in that leg = the forfeit loss, equal counts = a 1-1 draw) the moment anyone loads the app after the deadline. This section is just a manual fallback / rarely needed.</p>', unsafe_allow_html=True)
         if not deadline_passed and not leg2_deadline_passed:
             st.markdown('<p class="muted">No deadline has passed yet — nothing to forfeit.</p>', unsafe_allow_html=True)
         else:
@@ -626,6 +671,30 @@ elif page_key == "admin":
                             db.apply_forfeit(f["id"], outcome_choice)
                             st.success("Forfeit result applied.")
                             st.rerun()
+
+        st.markdown('<p class="section-title" style="font-size: 1rem;">Closed-leg fixtures (admin edit)</p>', unsafe_allow_html=True)
+        st.markdown('<p class="muted">Once a leg\'s deadline passes, players can no longer tick or undo results for it — only you can correct a score from here (e.g. an auto-resolved forfeit that should\'ve been a real result).</p>', unsafe_allow_html=True)
+        closed_legs = [leg for leg, passed in ((1, deadline_passed), (2, leg2_deadline_passed)) if passed]
+        if not closed_legs:
+            st.markdown('<p class="muted">No leg is closed yet.</p>', unsafe_allow_html=True)
+        else:
+            closed_fixtures = [f for f in db.list_fixtures(active_league["id"]) if f["leg"] in closed_legs]
+            for f in closed_fixtures:
+                tag = " · 🚩 forfeit" if f.get("forfeit") else ""
+                score = f"{f['home_score']}-{f['away_score']}" if f["played"] else "unplayed"
+                with st.expander(f"{f['home_ign']} vs {f['away_ign']} (Leg {f['leg']}){tag} — {score}"):
+                    ec1, ec2, ec3 = st.columns([1, 1, 1.4])
+                    new_hs = ec1.number_input("Home", min_value=0, max_value=20, value=f["home_score"] or 0, key=f"edit_hs_{f['id']}")
+                    new_aws = ec2.number_input("Away", min_value=0, max_value=20, value=f["away_score"] or 0, key=f"edit_as_{f['id']}")
+                    ec3.markdown("<div style='height: 1.6rem'></div>", unsafe_allow_html=True)
+                    if ec3.button("Save correction", key=f"edit_save_{f['id']}", use_container_width=True):
+                        db.submit_result(f["id"], int(new_hs), int(new_aws))
+                        st.success("Result corrected.")
+                        st.rerun()
+                    if f["played"] and st.button("Revert to unplayed", key=f"edit_revert_{f['id']}"):
+                        db.unmark_result(f["id"])
+                        st.success("Reverted — fixture is unplayed again.")
+                        st.rerun()
 
         st.markdown('<p class="muted">Made a mistake starting this one (wrong players, test league, etc)? Cancel it below instead of completing it — this deletes it with no archive.</p>', unsafe_allow_html=True)
         cancel_confirm = st.checkbox("Confirm cancel — this deletes the league and its fixtures, no undo", key="cancel_active_confirm")
