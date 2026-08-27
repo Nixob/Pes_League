@@ -342,7 +342,12 @@ elif page_key == "fixtures":
                 unsafe_allow_html=True,
             )
 
-        leg_filter = st.radio("View", options=["All", "Leg 1", "Leg 2"], horizontal=True, label_visibility="collapsed")
+        active_leg_label = "Leg 2" if league["leg2_unlocked"] else "Leg 1"
+        leg_options = ["All", "Leg 1", "Leg 2"]
+        leg_filter = st.radio(
+            "View", options=leg_options, index=leg_options.index(active_leg_label),
+            horizontal=True, label_visibility="collapsed",
+        )
 
         st.markdown('<div class="section-title">Fixture list</div>', unsafe_allow_html=True)
         st.markdown('<p class="muted">Tick a fixture once it\'s been played and enter the score.</p>', unsafe_allow_html=True)
