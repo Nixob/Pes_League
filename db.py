@@ -87,6 +87,23 @@ def remove_player(player_id: str):
     return sb.table("players").delete().eq("id", player_id).execute().data
 
 
+def get_orphaned_fixtures(league_id: str):
+    """Fixtures in this league where one side's player has since been
+    deleted (player_id is null on that side, name kept as a snapshot).
+    These are always PLAYED matches — remove_player already clears out
+    any unplayed ones — left behind on purpose as real history. Surfaced
+    here so the admin can optionally purge one entirely if it's throwing
+    off match-count comparisons for whoever's left."""
+    fixtures = list_fixtures(league_id)
+    return [f for f in fixtures if f["home_player_id"] is None or f["away_player_id"] is None]
+
+
+def delete_fixture(fixture_id: str):
+    """Permanently deletes a single fixture row. No undo."""
+    sb = get_client()
+    return sb.table("fixtures").delete().eq("id", fixture_id).execute().data
+
+
 # ----------------------------------------------------------------- leagues --
 
 def get_active_league():
