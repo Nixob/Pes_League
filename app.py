@@ -672,6 +672,22 @@ elif page_key == "admin":
                             st.success("Forfeit result applied.")
                             st.rerun()
 
+        st.markdown('<p class="section-title" style="font-size: 1rem;">Matches involving removed players</p>', unsafe_allow_html=True)
+        st.markdown('<p class="muted">When you remove a player, any match they already played is kept as real history — but it leaves their opponent with one extra match compared to everyone else. If that\'s throwing off comparisons, you can wipe that specific match here.</p>', unsafe_allow_html=True)
+        orphaned = db.get_orphaned_fixtures(active_league["id"])
+        if not orphaned:
+            st.markdown('<p class="muted">None right now.</p>', unsafe_allow_html=True)
+        else:
+            for f in orphaned:
+                score = f"{f['home_score']}-{f['away_score']}" if f["played"] else "unplayed"
+                with st.expander(f"{f['home_ign']} vs {f['away_ign']} (Leg {f['leg']}) — {score}"):
+                    st.markdown('<p class="muted">One of these players has since been removed. Deleting this match removes it from the standings entirely (both sides), bringing match counts back in line.</p>', unsafe_allow_html=True)
+                    confirm_del = st.checkbox("Confirm delete — no undo", key=f"confirm_orphan_del_{f['id']}")
+                    if st.button("🗑️ Delete this match", key=f"orphan_del_{f['id']}", disabled=not confirm_del):
+                        db.delete_fixture(f["id"])
+                        st.success("Match deleted.")
+                        st.rerun()
+
         st.markdown('<p class="section-title" style="font-size: 1rem;">Closed-leg fixtures (admin edit)</p>', unsafe_allow_html=True)
         st.markdown('<p class="muted">Once a leg\'s deadline passes, players can no longer tick or undo results for it — only you can correct a score from here (e.g. an auto-resolved forfeit that should\'ve been a real result).</p>', unsafe_allow_html=True)
         closed_legs = [leg for leg, passed in ((1, deadline_passed), (2, leg2_deadline_passed)) if passed]
