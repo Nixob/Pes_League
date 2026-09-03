@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 IST = ZoneInfo("Asia/Kolkata")
 
-st.set_page_config(page_title="PES with the Bois", page_icon="🟣", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="PES With the Bois", page_icon="🟣", layout="wide", initial_sidebar_state="collapsed")
 
 PAGE_LABELS = {
     "home": "Home",
@@ -170,6 +170,49 @@ table.league-table tr.playoff-row td:first-child {
 }
 .tie-meta { color: var(--muted); font-size: 0.8rem; }
 
+.bracket-wrap {
+    width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    padding: .5rem 0 1.4rem;
+}
+.bracket-board {
+    min-width: 720px; display:grid;
+    grid-template-columns: minmax(150px,1fr) 150px 150px 150px minmax(150px,1fr);
+    grid-template-rows: repeat(7,54px); align-items:center; position:relative;
+    padding:.4rem .3rem;
+}
+.bracket-col { position:relative; height:100%; }
+.bracket-col.left { grid-column:1; grid-row:1/-1; }
+.bracket-col.left-sf { grid-column:2; grid-row:1/-1; display:flex; align-items:center; justify-content:center; }
+.bracket-col.final { grid-column:3; grid-row:1/-1; display:flex; align-items:center; justify-content:center; }
+.bracket-col.right-sf { grid-column:4; grid-row:1/-1; display:flex; align-items:center; justify-content:center; }
+.bracket-col.right { grid-column:5; grid-row:1/-1; }
+.bracket-side-label { position:absolute; top:-.1rem; width:100%; text-align:center; color:var(--accent); font-family:'Poppins',sans-serif; font-weight:600; font-size:.68rem; letter-spacing:.35px; text-transform:uppercase; }
+.bracket-match { position:absolute; width:150px; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:.5rem .65rem; box-sizing:border-box; }
+.bracket-match.left-match { right:0; }
+.bracket-match.right-match { left:0; }
+.bracket-match.qf1 { top:54px; }
+.bracket-match.qf2 { top:216px; }
+.bracket-match.sf { position:relative; width:150px; }
+.bracket-match::after,.bracket-match::before { content:''; position:absolute; border-color:var(--line); border-style:solid; }
+.left .qf1::after,.left .qf2::after { right:-38px; width:38px; height:81px; top:50%; border-width:0 1px 1px 0; }
+.right .qf1::before,.right .qf2::before { left:-38px; width:38px; height:81px; top:50%; border-width:0 0 1px 1px; }
+.left-sf .sf::before { left:-38px; width:38px; height:0; top:50%; border-width:1px 0 0; }
+.right-sf .sf::after { right:-38px; width:38px; height:0; top:50%; border-width:1px 0 0; }
+.left-sf .sf::after { right:-38px; width:38px; height:81px; top:50%; border-width:0 1px 1px 0; }
+.right-sf .sf::before { left:-38px; width:38px; height:81px; top:50%; border-width:0 0 1px 1px; }
+.left-sf .sf { transform:translateY(27px); }
+.right-sf .sf { transform:translateY(27px); }
+.bracket-match.final { position:relative; width:145px; border:1.5px solid var(--accent); text-align:center; box-shadow:0 0 0 1px var(--accent-soft); }
+.bracket-match.final::before { left:-38px; width:38px; top:50%; border-width:1px 0 0; }
+.bracket-match.final::after { right:-38px; width:38px; top:50%; border-width:1px 0 0; }
+.bracket-round { color:var(--accent); font-family:'Poppins',sans-serif; font-weight:600; font-size:.66rem; text-transform:uppercase; margin-bottom:.25rem; }
+.bracket-team { display:flex; justify-content:space-between; gap:.3rem; padding:.12rem 0; font-size:.75rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bracket-team span { overflow:hidden; text-overflow:ellipsis; }
+.bracket-team.winner { font-weight:700; }
+.bracket-agg-mini { border-top:1px solid rgba(125,125,132,.35); margin-top:.25rem; padding-top:.25rem; color:var(--muted); font-size:.61rem; text-align:center; }
+.bracket-final-score { margin-top:.3rem; font-weight:700; font-size:.68rem; }
+.bracket-pending { opacity:.7; }
+
 @media (max-width: 640px) {
     .block-container { padding-left: 0.6rem; padding-right: 0.6rem; }
     .brand-bar { font-size: 1.25rem; }
@@ -178,6 +221,18 @@ table.league-table tr.playoff-row td:first-child {
     table.league-table { min-width: 0; width: 100%; font-size: 0.66rem; }
     table.league-table th, table.league-table td { padding: 4px 5px; }
     .club-sub { font-size: 0.78em; }
+    .bracket-wrap { margin-left:-0.2rem; margin-right:-0.2rem; padding-left:.15rem; padding-right:.15rem; }
+    .bracket-board { min-width:620px; grid-template-columns:125px 115px 125px 115px 125px; grid-template-rows:repeat(7,46px); }
+    .bracket-match { width:125px; padding:.42rem .45rem; border-radius:7px; }
+    .bracket-match.qf1 { top:46px; } .bracket-match.qf2 { top:184px; }
+    .bracket-match.sf { width:115px; } .bracket-match.final { width:125px; }
+    .bracket-team { font-size:.62rem; } .bracket-round { font-size:.55rem; }
+    .bracket-agg-mini { font-size:.52rem; } .bracket-side-label { font-size:.55rem; }
+    .bracket-final-score { font-size:.58rem; }
+    .left .qf1::after,.left .qf2::after,.right .qf1::before,.right .qf2::before,.left-sf .sf::before,.left-sf .sf::after,.right-sf .sf::before,.right-sf .sf::after { width:24px; }
+    .left .qf1::after,.left .qf2::after,.right .qf1::before,.right .qf2::before,.left-sf .sf::after,.right-sf .sf::before { height:69px; }
+    .left-sf .sf::before,.right-sf .sf::after,.bracket-match.final::before,.bracket-match.final::after { width:24px; }
+    .bracket-match.final::before { left:-24px; } .bracket-match.final::after { right:-24px; }
 
     /* fixture cards: give inputs/buttons a bit more breathing room */
     div[data-testid="stNumberInput"] input { padding: 6px 8px; font-size: 0.9rem; }
@@ -273,7 +328,7 @@ def standings_rows(table):
 
 # --------------------------------------------------------------------- UI --
 
-st.markdown('<div class="brand-bar">PES with the Bois</div>', unsafe_allow_html=True)
+st.markdown('<div class="brand-bar">PES With the Bois</div>', unsafe_allow_html=True)
 
 
 def go_to(page: str):
@@ -490,8 +545,6 @@ elif page_key == "playoffs":
     if not league:
         st.info("No league or playoff bracket exists yet.")
     else:
-        # If the league is active, this also creates the next round automatically
-        # after all two-legged ties in the current round are complete.
         if league.get("status") == "active":
             db.advance_playoffs(league["id"])
 
@@ -503,13 +556,12 @@ elif page_key == "playoffs":
         st.markdown(f'<p class="muted" style="text-align:center;">{league["name"]}</p>', unsafe_allow_html=True)
         st.markdown('<p class="muted" style="text-align:center;">Top 8 knockout • Two-legged ties • Old UCL away-goal rule • One-match final</p>', unsafe_allow_html=True)
 
-        def render_tie(tie, title, leg1_no, leg2_no):
+        def tie_data(tie, leg1_no, leg2_no):
             by_leg = {f["leg"]: f for f in tie}
             if leg1_no not in by_leg or leg2_no not in by_leg:
-                return
+                return None
             f1, f2 = by_leg[leg1_no], by_leg[leg2_no]
-            teams = [f1["home_player_id"], f1["away_player_id"]]
-            a, b = teams
+            a, b = f1["home_player_id"], f1["away_player_id"]
             agg = {a: 0, b: 0}
             away = {a: 0, b: 0}
             for f in (f1, f2):
@@ -517,85 +569,131 @@ elif page_key == "playoffs":
                     agg[f["home_player_id"]] += f["home_score"]
                     agg[f["away_player_id"]] += f["away_score"]
                     away[f["away_player_id"]] += f["away_score"]
+            winner = None
+            reason = None
+            if all(f["played"] for f in (f1, f2)):
+                if agg[a] != agg[b]:
+                    winner, reason = (a if agg[a] > agg[b] else b), "aggregate"
+                elif away[a] != away[b]:
+                    winner, reason = (a if away[a] > away[b] else b), "away goals"
+                else:
+                    seeds = {r["player_id"]: i + 1 for i, r in enumerate(db.get_standings(league["id"])[:8])}
+                    winner, reason = min((a, b), key=lambda pid: seeds.get(pid, 99)), "higher league seed"
+            return f1, f2, a, b, agg, away, winner, reason
 
-            with st.container(border=True):
-                st.markdown(f"**{title}**")
-                for leg_label, f in (("Leg 1", f1), ("Leg 2", f2)):
-                    st.caption(leg_label)
-                    if f["played"]:
-                        st.markdown(f"**{f['home_ign']}** ({f['home_club_name']})  **{f['home_score']} – {f['away_score']}**  **{f['away_ign']}** ({f['away_club_name']})")
-                    elif league.get("status") == "active":
-                        c1, c2, c3 = st.columns([1, 1, 1.5])
-                        hs = c1.number_input("Home", min_value=0, max_value=20, step=1, key=f"po_hs_{f['id']}")
-                        aws = c2.number_input("Away", min_value=0, max_value=20, step=1, key=f"po_as_{f['id']}")
-                        c3.markdown(f"<div style='padding-top:0.55rem; font-size:0.9rem;'>{f['home_ign']} vs {f['away_ign']}</div>", unsafe_allow_html=True)
-                        if c3.button("✅ Played", key=f"po_played_{f['id']}", use_container_width=True):
-                            try:
-                                db.submit_result(f["id"], int(hs), int(aws))
-                                st.rerun()
-                            except Exception as e:
-                                st.error(str(e))
-                    else:
-                        st.markdown(f"**{f['home_ign']}** vs **{f['away_ign']}**  ·  ⏳ Pending")
-
-                st.markdown(f"**Aggregate:** {agg[a]} – {agg[b]} &nbsp; · &nbsp; **Away goals:** {away[a]} – {away[b]}")
-                if all(f["played"] for f in (f1, f2)):
-                    if agg[a] != agg[b]:
-                        leader = a if agg[a] > agg[b] else b
-                        reason = "aggregate"
-                    elif away[a] != away[b]:
-                        leader = a if away[a] > away[b] else b
-                        reason = "away goals"
-                    else:
-                        seeds = {r["player_id"]: i + 1 for i, r in enumerate(db.get_standings(league["id"])[:8])}
-                        leader = min((a, b), key=lambda pid: seeds.get(pid, 99))
-                        reason = "higher league seed"
-                    name = f1["home_ign"] if leader == a else f1["away_ign"]
-                    st.success(f"Advances: {name} ({reason})")
-
-        def grouped_ties(fs, leg1, leg2):
-            groups = {}
-            for f in fs:
-                key = tuple(sorted((f["home_player_id"], f["away_player_id"])))
-                groups.setdefault(key, []).append(f)
-            return list(groups.values())
+        def tie_label(tie, leg1_no, leg2_no):
+            data = tie_data(tie, leg1_no, leg2_no)
+            if not data:
+                return ("TBD", "TBD", "–", None, None)
+            f1, f2, a, b, agg, away, winner, reason = data
+            return (
+                f1["home_ign"], f1["away_ign"],
+                f'{agg[a]} – {agg[b]}' if any(f["played"] for f in (f1, f2)) else "–",
+                winner, reason,
+            )
 
         qf_groups = grouped_ties(qfs, db.QF_LEG1, db.QF_LEG2)
         sf_groups = grouped_ties(sfs, db.SF_LEG1, db.SF_LEG2)
 
         if qf_groups:
-            st.markdown('<div class="knockout-title">Quarter-finals</div>', unsafe_allow_html=True)
+            qf_cards=[]
+            for i,tie in enumerate(qf_groups,1):
+                n1,n2,agg,winner,reason=tie_label(tie,db.QF_LEG1,db.QF_LEG2)
+                qf_cards.append((i,n1,n2,agg,winner))
+            left_qfs=qf_cards[:2]; right_qfs=qf_cards[2:4]
+            left_sf=sf_groups[0] if len(sf_groups)>0 else None
+            right_sf=sf_groups[1] if len(sf_groups)>1 else None
+
+            def match_card(item,side):
+                i,n1,n2,agg,winner=item; tie=qf_groups[i-1]
+                winner_name=None
+                if winner: winner_name=tie[0]["home_ign"] if winner==tie[0]["home_player_id"] else tie[0]["away_ign"]
+                w1=' winner' if winner_name==n1 else ''; w2=' winner' if winner_name==n2 else ''
+                cls=('left-match ' if side=='left' else 'right-match ')+('qf1' if i in (1,3) else 'qf2')
+                return (f'<div class="bracket-match {cls}"><div class="bracket-round">QF {i}</div>'
+                        f'<div class="bracket-team{w1}"><span>{n1}</span></div>'
+                        f'<div class="bracket-team{w2}"><span>{n2}</span></div>'
+                        f'<div class="bracket-agg-mini">Agg {agg}</div></div>')
+
+            def sf_html(tie,title,q1,q2):
+                if not tie:
+                    return (f'<div class="bracket-match sf bracket-pending"><div class="bracket-round">{title}</div>'
+                            f'<div class="bracket-team"><span>Winner QF {q1}</span></div><div class="bracket-team"><span>Winner QF {q2}</span></div>'
+                            f'<div class="bracket-agg-mini">Awaiting QFs</div></div>')
+                n1,n2,agg,winner,reason=tie_label(tie,db.SF_LEG1,db.SF_LEG2)
+                w1=' winner' if winner and winner==tie[0]["home_player_id"] else ''; w2=' winner' if winner and winner==tie[0]["away_player_id"] else ''
+                return (f'<div class="bracket-match sf"><div class="bracket-round">{title}</div>'
+                        f'<div class="bracket-team{w1}"><span>{n1}</span></div><div class="bracket-team{w2}"><span>{n2}</span></div>'
+                        f'<div class="bracket-agg-mini">Agg {agg}</div></div>')
+
+            if final:
+                ff=final[0]; final_left,final_right=ff["home_ign"],ff["away_ign"]
+                final_score=f'{ff["home_score"]} – {ff["away_score"]}' if ff["played"] else 'FINAL AWAITS'
+            else: final_left,final_right,final_score='Winner SF 1','Winner SF 2','FINAL AWAITS'
+
+            visual=f'''<div class="bracket-wrap"><div class="bracket-board">
+                <div class="bracket-col left"><div class="bracket-side-label">QF · PATH A</div>
+                    {match_card(left_qfs[0],'left') if len(left_qfs)>0 else ''}{match_card(left_qfs[1],'left') if len(left_qfs)>1 else ''}</div>
+                <div class="bracket-col left-sf">{sf_html(left_sf,'SF 1',1,2)}</div>
+                <div class="bracket-col final"><div class="bracket-match final"><div class="bracket-round">🏆 FINAL · ONE MATCH</div>
+                    <div class="bracket-team"><span>{final_left}</span></div><div class="bracket-team"><span>{final_right}</span></div>
+                    <div class="bracket-final-score">{final_score}</div></div></div>
+                <div class="bracket-col right-sf">{sf_html(right_sf,'SF 2',3,4)}</div>
+                <div class="bracket-col right"><div class="bracket-side-label">PATH B · QF</div>
+                    {match_card(right_qfs[0],'right') if len(right_qfs)>0 else ''}{match_card(right_qfs[1],'right') if len(right_qfs)>1 else ''}</div>
+            </div></div>'''
+            st.markdown(visual,unsafe_allow_html=True)
+
+            st.markdown('<div class="knockout-title">Match results</div>', unsafe_allow_html=True)
+
+            def render_tie_editor(tie, title):
+                leg1 = db.QF_LEG1 if title.startswith("QF") else db.SF_LEG1
+                leg2 = db.QF_LEG2 if title.startswith("QF") else db.SF_LEG2
+                data = tie_data(tie, leg1, leg2)
+                if not data:
+                    return
+                f1, f2, a, b, agg, away, winner, reason = data
+                with st.container(border=True):
+                    st.markdown(f'**{title}** — {f1["home_ign"]} vs {f1["away_ign"]}')
+                    for label, f in (("Leg 1", f1), ("Leg 2", f2)):
+                        if f["played"]:
+                            st.markdown(f'**{label}:** {f["home_score"]} – {f["away_score"]}')
+                        elif league.get("status") == "active":
+                            c1, c2, c3 = st.columns([1, 1, 1.25])
+                            hs = c1.number_input(f"{label} H", min_value=0, max_value=20, step=1, key=f"po_hs_{f['id']}")
+                            aws = c2.number_input(f"{label} A", min_value=0, max_value=20, step=1, key=f"po_as_{f['id']}")
+                            if c3.button(f"Save {label}", key=f"po_played_{f['id']}", use_container_width=True):
+                                db.submit_result(f["id"], int(hs), int(aws))
+                                st.rerun()
+                    st.caption(f"Aggregate: {agg[a]} – {agg[b]}  •  Away goals: {away[a]} – {away[b]}")
+                    if winner:
+                        win_name = f1["home_ign"] if winner == a else f1["away_ign"]
+                        st.success(f"{win_name} advances ({reason}).")
+
             for i, tie in enumerate(qf_groups, 1):
-                render_tie(tie, f"QF {i}", db.QF_LEG1, db.QF_LEG2)
-        if sf_groups:
-            st.markdown('<div class="knockout-title">Semi-finals</div>', unsafe_allow_html=True)
+                render_tie_editor(tie, f"QF {i}")
             for i, tie in enumerate(sf_groups, 1):
-                render_tie(tie, f"SF {i}", db.SF_LEG1, db.SF_LEG2)
-        if final:
-            f = final[0]
-            st.markdown('<div class="knockout-title">Final</div>', unsafe_allow_html=True)
-            with st.container(border=True):
-                st.markdown(f"### {f['home_ign']} ({f['home_club_name']}) vs {f['away_ign']} ({f['away_club_name']})")
-                if f["played"]:
-                    st.markdown(f":green[🏆 **{f['home_score']} – {f['away_score']}**]")
-                    champion = db.playoff_champion(league["id"])
-                    if champion:
-                        winner_name = f["home_ign"] if champion == f["home_player_id"] else f["away_ign"]
-                        st.success(f"Champion: {winner_name}")
-                elif league.get("status") == "active":
-                    c1, c2, c3 = st.columns([1, 1, 1.4])
-                    hs = c1.number_input("Home", min_value=0, max_value=20, step=1, key=f"po_final_hs_{f['id']}")
-                    aws = c2.number_input("Away", min_value=0, max_value=20, step=1, key=f"po_final_as_{f['id']}")
-                    c3.markdown("<div style='height: 1.6rem'></div>", unsafe_allow_html=True)
-                    if c3.button("✅ Final played", key=f"po_final_{f['id']}", use_container_width=True):
-                        try:
+                render_tie_editor(tie, f"SF {i}")
+
+            if final:
+                f = final[0]
+                st.markdown('<div class="knockout-title">Final — one match</div>', unsafe_allow_html=True)
+                with st.container(border=True):
+                    st.markdown(f'**{f["home_ign"]}** vs **{f["away_ign"]}**')
+                    if f["played"]:
+                        st.markdown(f':green[🏆 **{f["home_score"]} – {f["away_score"]}**]')
+                        champion = db.playoff_champion(league["id"])
+                        if champion:
+                            winner_name = f["home_ign"] if champion == f["home_player_id"] else f["away_ign"]
+                            st.success(f"🏆 Champion: {winner_name}")
+                    elif league.get("status") == "active":
+                        c1, c2, c3 = st.columns([1, 1, 1.25])
+                        hs = c1.number_input("Final H", min_value=0, max_value=20, step=1, key=f"po_final_hs_{f['id']}")
+                        aws = c2.number_input("Final A", min_value=0, max_value=20, step=1, key=f"po_final_as_{f['id']}")
+                        if c3.button("Save Final", key=f"po_final_{f['id']}", use_container_width=True):
                             db.submit_result(f["id"], int(hs), int(aws))
                             st.rerun()
-                        except Exception as e:
-                            st.error(str(e))
-                else:
-                    st.info("Final is ready but the season is already archived.")
-        elif not qf_groups:
+        else:
             st.info("The top-8 playoff bracket will appear here once the league stage is completed.")
 
 
