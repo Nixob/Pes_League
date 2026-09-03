@@ -291,7 +291,7 @@ maybe_auto_resolve()
 if page_key == "home":
     st.markdown('<div style="height: 0.8rem;"></div>', unsafe_allow_html=True)
 
-    tile_rows = [["fixtures", "table"], ["history", "register"], ["rules", "admin"]]
+    tile_rows = [["fixtures", "table"], ["history", "register"], ["rules", "playoffs"], ["admin"]]
     for row in tile_rows:
         cols = st.columns(len(row)) if len(row) > 1 else [st.columns([1, 2, 1])[1]]
         for i, key in enumerate(row):
