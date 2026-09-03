@@ -1032,6 +1032,7 @@ elif page_key == "admin":
                     st.error(str(e))
 
 
+
     st.markdown('<div class="section-title">Delete league history</div>', unsafe_allow_html=True)
     st.markdown('<p class="muted">Permanently deletes a completed league and its fixtures — no undo.</p>', unsafe_allow_html=True)
     completed = db.list_completed_leagues()
