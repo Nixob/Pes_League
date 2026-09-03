@@ -273,7 +273,7 @@ def standings_rows(table):
 
 # --------------------------------------------------------------------- UI --
 
-st.markdown('<div class="brand-bar">PES With the Bois</div>', unsafe_allow_html=True)
+st.markdown('<div class="brand-bar">PES with the Bois</div>', unsafe_allow_html=True)
 
 
 def go_to(page: str):
