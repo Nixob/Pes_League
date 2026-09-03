@@ -680,6 +680,23 @@ elif page_key == "playoffs":
                     for label, f in (("Leg 1", f1), ("Leg 2", f2)):
                         if f["played"]:
                             st.markdown(f'**{label}:** {f["home_score"]} – {f["away_score"]}')
+                            # Keep the same safe two-step Undo flow used by league fixtures.
+                            confirm_key = f"po_confirm_undo_{f['id']}"
+                            if st.session_state.get(confirm_key):
+                                st.markdown('<p class="muted">Undo this playoff result?</p>', unsafe_allow_html=True)
+                                uc1, uc2 = st.columns(2)
+                                if uc1.button("Yes, undo", key=f"po_undo_yes_{f['id']}", use_container_width=True):
+                                    db.unmark_result(f["id"])
+                                    st.session_state[confirm_key] = False
+                                    st.toast("Playoff result undone.", icon="↩️")
+                                    st.rerun()
+                                if uc2.button("Cancel", key=f"po_undo_no_{f['id']}", use_container_width=True):
+                                    st.session_state[confirm_key] = False
+                                    st.rerun()
+                            elif league.get("status") == "active":
+                                if st.button("Undo", key=f"po_undo_{f['id']}", use_container_width=True):
+                                    st.session_state[confirm_key] = True
+                                    st.rerun()
                         elif league.get("status") == "active":
                             c1, c2, c3 = st.columns([1, 1, 1.25])
                             hs = c1.number_input(f"{label} H", min_value=0, max_value=20, step=1, key=f"po_hs_{f['id']}")
@@ -704,6 +721,22 @@ elif page_key == "playoffs":
                     st.markdown(f'**{f["home_ign"]}** vs **{f["away_ign"]}**')
                     if f["played"]:
                         st.markdown(f':green[🏆 **{f["home_score"]} – {f["away_score"]}**]')
+                        confirm_key = f"po_confirm_undo_{f['id']}"
+                        if st.session_state.get(confirm_key):
+                            st.markdown('<p class="muted">Undo this final result?</p>', unsafe_allow_html=True)
+                            uc1, uc2 = st.columns(2)
+                            if uc1.button("Yes, undo", key=f"po_undo_yes_{f['id']}", use_container_width=True):
+                                db.unmark_result(f["id"])
+                                st.session_state[confirm_key] = False
+                                st.toast("Final result undone.", icon="↩️")
+                                st.rerun()
+                            if uc2.button("Cancel", key=f"po_undo_no_{f['id']}", use_container_width=True):
+                                st.session_state[confirm_key] = False
+                                st.rerun()
+                        elif league.get("status") == "active":
+                            if st.button("Undo", key=f"po_undo_{f['id']}", use_container_width=True):
+                                st.session_state[confirm_key] = True
+                                st.rerun()
                         champion = db.playoff_champion(league["id"])
                         if champion:
                             winner_name = f["home_ign"] if champion == f["home_player_id"] else f["away_ign"]
