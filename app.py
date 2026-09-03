@@ -1,6 +1,9 @@
 import streamlit as st
 import db
-from datetime import date
+from datetime import date, datetime, time as dtime
+from zoneinfo import ZoneInfo
+
+IST = ZoneInfo("Asia/Kolkata")
 
 st.set_page_config(page_title="PES With the Bois", page_icon="🟣", layout="wide", initial_sidebar_state="collapsed")
 
@@ -12,6 +15,7 @@ PAGE_LABELS = {
     "register": "Register",
     "rules": "Rules",
     "admin": "Admin",
+    "edit_closed": "Edit Closed Fixtures",
 }
 
 PAGE_ICONS = {
@@ -253,8 +257,13 @@ if page_key != "home":
 
 
 def leg_deadline_passed(league, leg: int) -> bool:
+    """A leg's deadline is 12:00 PM IST on the given date — not the day
+    after. Once that moment passes, the leg is considered closed."""
     raw = league.get("deadline") if leg == 1 else league.get("leg2_deadline")
-    return bool(raw) and date.today() > date.fromisoformat(raw)
+    if not raw:
+        return False
+    deadline_dt = datetime.combine(date.fromisoformat(raw), dtime(12, 0), tzinfo=IST)
+    return datetime.now(IST) >= deadline_dt
 
 
 def maybe_auto_resolve():
@@ -309,24 +318,24 @@ elif page_key == "fixtures":
             deadline_date = date.fromisoformat(raw_deadline)
             if leg1_closed:
                 st.markdown(
-                    f'<p class="muted">⏰ Leg 1 deadline was <b>{deadline_date.strftime("%d %b %Y")}</b> — '
-                    f'Leg 1 is now closed.</p>',
+                    f'<p class="muted">⏰ Leg 1 deadline was <b>{deadline_date.strftime("%d %b %Y")}, 12:00 PM</b> — '
+                    f'Leg 1 is now closed, results can only be corrected by the admin.</p>',
                     unsafe_allow_html=True,
                 )
             else:
-                st.markdown(f'<p class="muted">⏳ Leg 1 deadline: <b>{deadline_date.strftime("%d %b %Y")}</b></p>', unsafe_allow_html=True)
+                st.markdown(f'<p class="muted">⏳ Leg 1 deadline: <b>{deadline_date.strftime("%d %b %Y")}, 12:00 PM</b></p>', unsafe_allow_html=True)
 
         raw_leg2_deadline = league.get("leg2_deadline")
         if raw_leg2_deadline:
             leg2_deadline_date = date.fromisoformat(raw_leg2_deadline)
             if leg2_closed:
                 st.markdown(
-                    f'<p class="muted">⏰ Leg 2 deadline was <b>{leg2_deadline_date.strftime("%d %b %Y")}</b> — '
-                    f'Leg 2 is now closed.</p>',
+                    f'<p class="muted">⏰ Leg 2 deadline was <b>{leg2_deadline_date.strftime("%d %b %Y")}, 12:00 PM</b> — '
+                    f'Leg 2 is now closed, results can only be corrected by the admin.</p>',
                     unsafe_allow_html=True,
                 )
             else:
-                st.markdown(f'<p class="muted">⏳ Leg 2 deadline: <b>{leg2_deadline_date.strftime("%d %b %Y")}</b></p>', unsafe_allow_html=True)
+                st.markdown(f'<p class="muted">⏳ Leg 2 deadline: <b>{leg2_deadline_date.strftime("%d %b %Y")}, 12:00 PM</b></p>', unsafe_allow_html=True)
 
         approved_players = [p for p in db.list_players(status="approved") if p["active"]]
         names = {p["id"]: player_label(p) for p in approved_players}
@@ -548,16 +557,16 @@ elif page_key == "admin":
         st.markdown('<p class="section-title" style="font-size: 1rem;">Leg 1 deadline</p>', unsafe_allow_html=True)
         raw_deadline = active_league.get("deadline")
         current_deadline_date = date.fromisoformat(raw_deadline) if raw_deadline else None
-        deadline_passed = current_deadline_date is not None and date.today() > current_deadline_date
+        deadline_passed = leg_deadline_passed(active_league, 1)
 
         if current_deadline_date:
             if deadline_passed:
                 st.markdown(
-                    f'<p class="muted">⏰ Deadline was <b>{current_deadline_date.strftime("%d %b %Y")}</b> — passed. '
+                    f'<p class="muted">⏰ Deadline was <b>{current_deadline_date.strftime("%d %b %Y")}, 12:00 PM</b> — passed. '
                     f'Overdue Leg 1 fixtures can be forfeited below.</p>', unsafe_allow_html=True,
                 )
             else:
-                st.markdown(f'<p class="muted">Deadline: <b>{current_deadline_date.strftime("%d %b %Y")}</b></p>', unsafe_allow_html=True)
+                st.markdown(f'<p class="muted">Deadline: <b>{current_deadline_date.strftime("%d %b %Y")}, 12:00 PM</b></p>', unsafe_allow_html=True)
         else:
             st.markdown('<p class="muted">No Leg 1 deadline set — forfeits for Leg 1 are off until you set one.</p>', unsafe_allow_html=True)
 
@@ -575,7 +584,7 @@ elif page_key == "admin":
         st.markdown('<p class="section-title" style="font-size: 1rem;">Leg 2 deadline</p>', unsafe_allow_html=True)
         raw_leg2_deadline = active_league.get("leg2_deadline")
         current_leg2_deadline_date = date.fromisoformat(raw_leg2_deadline) if raw_leg2_deadline else None
-        leg2_deadline_passed = current_leg2_deadline_date is not None and date.today() > current_leg2_deadline_date
+        leg2_deadline_passed = leg_deadline_passed(active_league, 2)
 
         if not active_league["leg2_unlocked"]:
             st.markdown('<p class="muted">Leg 2 is still locked — you can set a deadline now, but it only makes sense once Leg 2 opens up.</p>', unsafe_allow_html=True)
@@ -583,11 +592,11 @@ elif page_key == "admin":
         if current_leg2_deadline_date:
             if leg2_deadline_passed:
                 st.markdown(
-                    f'<p class="muted">⏰ Deadline was <b>{current_leg2_deadline_date.strftime("%d %b %Y")}</b> — passed. '
+                    f'<p class="muted">⏰ Deadline was <b>{current_leg2_deadline_date.strftime("%d %b %Y")}, 12:00 PM</b> — passed. '
                     f'Overdue Leg 2 fixtures can be forfeited below.</p>', unsafe_allow_html=True,
                 )
             else:
-                st.markdown(f'<p class="muted">Deadline: <b>{current_leg2_deadline_date.strftime("%d %b %Y")}</b></p>', unsafe_allow_html=True)
+                st.markdown(f'<p class="muted">Deadline: <b>{current_leg2_deadline_date.strftime("%d %b %Y")}, 12:00 PM</b></p>', unsafe_allow_html=True)
         else:
             st.markdown('<p class="muted">No Leg 2 deadline set — forfeits for Leg 2 are off until you set one.</p>', unsafe_allow_html=True)
 
@@ -667,7 +676,7 @@ elif page_key == "admin":
                             options=["home", "draw", "away"],
                             format_func=lambda w, f=f: (
                                 f"{f['home_ign']} ({f['home_club_name']}) wins 1-0" if w == "home"
-                                else "Draw 1-1 — no forfeit loser" if w == "draw"
+                                else "Draw 0-0 — no forfeit loser" if w == "draw"
                                 else f"{f['away_ign']} ({f['away_club_name']}) wins 1-0"
                             ),
                             key=f"forfeit_choice_{f['id']}",
@@ -693,29 +702,9 @@ elif page_key == "admin":
                         st.success("Match deleted.")
                         st.rerun()
 
-        st.markdown('<p class="section-title" style="font-size: 1rem;">Closed-leg fixtures (admin edit)</p>', unsafe_allow_html=True)
-        st.markdown('<p class="muted">Once a leg\'s deadline passes, players can no longer tick or undo results for it — only you can correct a score from here (e.g. an auto-resolved forfeit that should\'ve been a real result).</p>', unsafe_allow_html=True)
-        closed_legs = [leg for leg, passed in ((1, deadline_passed), (2, leg2_deadline_passed)) if passed]
-        if not closed_legs:
-            st.markdown('<p class="muted">No leg is closed yet.</p>', unsafe_allow_html=True)
-        else:
-            closed_fixtures = [f for f in db.list_fixtures(active_league["id"]) if f["leg"] in closed_legs]
-            for f in closed_fixtures:
-                tag = " · 🚩 forfeit" if f.get("forfeit") else ""
-                score = f"{f['home_score']}-{f['away_score']}" if f["played"] else "unplayed"
-                with st.expander(f"{f['home_ign']} vs {f['away_ign']} (Leg {f['leg']}){tag} — {score}"):
-                    ec1, ec2, ec3 = st.columns([1, 1, 1.4])
-                    new_hs = ec1.number_input("Home", min_value=0, max_value=20, value=f["home_score"] or 0, key=f"edit_hs_{f['id']}")
-                    new_aws = ec2.number_input("Away", min_value=0, max_value=20, value=f["away_score"] or 0, key=f"edit_as_{f['id']}")
-                    ec3.markdown("<div style='height: 1.6rem'></div>", unsafe_allow_html=True)
-                    if ec3.button("Save correction", key=f"edit_save_{f['id']}", use_container_width=True):
-                        db.submit_result(f["id"], int(new_hs), int(new_aws))
-                        st.success("Result corrected.")
-                        st.rerun()
-                    if f["played"] and st.button("Revert to unplayed", key=f"edit_revert_{f['id']}"):
-                        db.unmark_result(f["id"])
-                        st.success("Reverted — fixture is unplayed again.")
-                        st.rerun()
+        st.markdown('<p class="section-title" style="font-size: 1rem;">Edit closed fixtures</p>', unsafe_allow_html=True)
+        st.markdown('<p class="muted">Once a leg\'s deadline passes, players can no longer tick or undo results for it — use this to correct a score (e.g. an auto-resolved forfeit that should\'ve been a real result).</p>', unsafe_allow_html=True)
+        st.button("✏️ Open Edit Closed Fixtures", on_click=go_to, args=("edit_closed",))
 
         st.markdown('<p class="muted">Made a mistake starting this one (wrong players, test league, etc)? Cancel it below instead of completing it — this deletes it with no archive.</p>', unsafe_allow_html=True)
         cancel_confirm = st.checkbox("Confirm cancel — this deletes the league and its fixtures, no undo", key="cancel_active_confirm")
@@ -769,3 +758,46 @@ elif page_key == "admin":
                 db.delete_league(lg["id"])
                 st.success(f"Deleted {lg['name']}.")
                 st.rerun()
+
+
+# ----------------------------------------------------- Edit Closed Fixtures --
+elif page_key == "edit_closed":
+    pw = st.text_input("Admin password", type="password", key="edit_closed_pw")
+    if pw != st.secrets.get("ADMIN_PASSWORD", ""):
+        st.warning("Enter the admin password to continue.")
+        st.stop()
+
+    active_league = db.get_active_league()
+
+    if not active_league:
+        st.markdown('<div class="section-title">No ongoing League</div>', unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div class="section-title">{active_league["name"]}</div>', unsafe_allow_html=True)
+
+        leg_choice = st.radio("Leg", options=[1, 2], format_func=lambda l: f"Leg {l}", horizontal=True)
+        leg_closed_now = leg_deadline_passed(active_league, leg_choice)
+        if leg_closed_now:
+            st.markdown('<p class="muted">🔒 This leg is closed — you can still correct results below.</p>', unsafe_allow_html=True)
+        else:
+            st.markdown('<p class="muted">This leg is still open — players can edit their own results normally, but you can override here too if needed.</p>', unsafe_allow_html=True)
+
+        leg_fixtures = [f for f in db.list_fixtures(active_league["id"]) if f["leg"] == leg_choice]
+        if not leg_fixtures:
+            st.markdown('<p class="muted">No fixtures found for this leg.</p>', unsafe_allow_html=True)
+        else:
+            for f in leg_fixtures:
+                tag = " · 🚩 forfeit" if f.get("forfeit") else ""
+                score = f"{f['home_score']}-{f['away_score']}" if f["played"] else "unplayed"
+                with st.expander(f"{f['home_ign']} vs {f['away_ign']}{tag} — {score}"):
+                    ec1, ec2, ec3 = st.columns([1, 1, 1.4])
+                    new_hs = ec1.number_input("Home", min_value=0, max_value=20, value=f["home_score"] or 0, key=f"edit_hs_{f['id']}")
+                    new_aws = ec2.number_input("Away", min_value=0, max_value=20, value=f["away_score"] or 0, key=f"edit_as_{f['id']}")
+                    ec3.markdown("<div style='height: 1.6rem'></div>", unsafe_allow_html=True)
+                    if ec3.button("Save correction", key=f"edit_save_{f['id']}", use_container_width=True):
+                        db.submit_result(f["id"], int(new_hs), int(new_aws))
+                        st.success("Result corrected.")
+                        st.rerun()
+                    if f["played"] and st.button("Revert to unplayed", key=f"edit_revert_{f['id']}"):
+                        db.unmark_result(f["id"])
+                        st.success("Reverted — fixture is unplayed again.")
+                        st.rerun()
