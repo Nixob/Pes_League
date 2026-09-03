@@ -704,6 +704,38 @@ elif page_key == "admin":
                         db.delete_fixture(f["id"])
                         st.success("Match deleted.")
                         st.rerun()
+                                # ---- Playoff management ----
+        st.markdown('<div class="section-title">Playoffs</div>', unsafe_allow_html=True)
+        playoff_fixtures = db.get_playoff_fixtures(active_league["id"])
+        if not playoff_fixtures:
+            if st.button("Generate Playoffs (top 8)", key="gen_playoffs"):
+                try:
+                    db.generate_playoffs(active_league["id"])
+                    st.success("Playoff fixtures generated!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(str(e))
+        else:
+            st.write("Playoffs have been generated.")
+            rounds = sorted(set(f["round"] for f in playoff_fixtures))
+            current_round = max(rounds)
+            round_fixtures = [f for f in playoff_fixtures if f["round"] == current_round]
+            all_played = all(f["played"] for f in round_fixtures)
+            if current_round < 3 and all_played:
+                if st.button(f"Advance to next round", key="advance_round"):
+                    try:
+                        db.advance_playoff_round(active_league["id"], current_round)
+                        st.success("Advanced to next round!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(str(e))
+            elif current_round == 3 and all_played:
+                winner_id = db.get_playoff_winner(active_league["id"])
+                if winner_id:
+                    winner = db.get_player(winner_id)
+                    st.success(f"🏆 Playoff winner: {winner['ign']} ({winner['club_name']})")
+                else:
+                    st.warning("Final played but no winner determined (draw). Please set winner manually.")
 
         st.markdown('<p class="section-title" style="font-size: 1rem;">Edit closed fixtures</p>', unsafe_allow_html=True)
         st.markdown('<p class="muted">Once a leg\'s deadline passes, players can no longer tick or undo results for it — use this to correct a score (e.g. an auto-resolved forfeit that should\'ve been a real result).</p>', unsafe_allow_html=True)
