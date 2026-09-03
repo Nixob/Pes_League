@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 import db
 from datetime import date, datetime, time as dtime
@@ -170,14 +171,16 @@ table.league-table tr.playoff-row td:first-child {
 }
 .tie-meta { color: var(--muted); font-size: 0.8rem; }
 
+/* --- updated bracket with arrows and tighter sizing --- */
 .bracket-wrap {
     width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch;
     padding: .5rem 0 1.4rem;
 }
 .bracket-board {
     min-width: 720px; display:grid;
-    grid-template-columns: minmax(150px,1fr) 150px 150px 150px minmax(150px,1fr);
-    grid-template-rows: repeat(7,54px); align-items:center; position:relative;
+    grid-template-columns: minmax(110px,1fr) 100px 110px 100px minmax(110px,1fr);
+    grid-template-rows: repeat(7, 42px);
+    align-items:center; position:relative;
     padding:.4rem .3rem;
 }
 .bracket-col { position:relative; height:100%; }
@@ -187,29 +190,98 @@ table.league-table tr.playoff-row td:first-child {
 .bracket-col.right-sf { grid-column:4; grid-row:1/-1; display:flex; align-items:center; justify-content:center; }
 .bracket-col.right { grid-column:5; grid-row:1/-1; }
 .bracket-side-label { position:absolute; top:-.1rem; width:100%; text-align:center; color:var(--accent); font-family:'Poppins',sans-serif; font-weight:600; font-size:.68rem; letter-spacing:.35px; text-transform:uppercase; }
-.bracket-match { position:absolute; width:150px; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:.5rem .65rem; box-sizing:border-box; }
+.bracket-match { position:absolute; width:150px; background:var(--card); border:1px solid var(--line); border-radius:6px; padding:.3rem .5rem; box-sizing:border-box; }
 .bracket-match.left-match { right:0; }
 .bracket-match.right-match { left:0; }
-.bracket-match.qf1 { top:54px; }
-.bracket-match.qf2 { top:216px; }
-.bracket-match.sf { position:relative; width:150px; }
-.bracket-match::after,.bracket-match::before { content:''; position:absolute; border-color:var(--line); border-style:solid; }
-.left .qf1::after,.left .qf2::after { right:-38px; width:38px; height:81px; top:50%; border-width:0 1px 1px 0; }
-.right .qf1::before,.right .qf2::before { left:-38px; width:38px; height:81px; top:50%; border-width:0 0 1px 1px; }
-.left-sf .sf::before { left:-38px; width:38px; height:0; top:50%; border-width:1px 0 0; }
-.right-sf .sf::after { right:-38px; width:38px; height:0; top:50%; border-width:1px 0 0; }
-.left-sf .sf::after { right:-38px; width:38px; height:81px; top:50%; border-width:0 1px 1px 0; }
-.right-sf .sf::before { left:-38px; width:38px; height:81px; top:50%; border-width:0 0 1px 1px; }
-.left-sf .sf { transform:translateY(27px); }
-.right-sf .sf { transform:translateY(27px); }
-.bracket-match.final { position:relative; width:145px; border:1.5px solid var(--accent); text-align:center; box-shadow:0 0 0 1px var(--accent-soft); }
-.bracket-match.final::before { left:-38px; width:38px; top:50%; border-width:1px 0 0; }
-.bracket-match.final::after { right:-38px; width:38px; top:50%; border-width:1px 0 0; }
-.bracket-round { color:var(--accent); font-family:'Poppins',sans-serif; font-weight:600; font-size:.66rem; text-transform:uppercase; margin-bottom:.25rem; }
-.bracket-team { display:flex; justify-content:space-between; gap:.3rem; padding:.12rem 0; font-size:.75rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bracket-match.qf1 { top:42px; }
+.bracket-match.qf2 { top:168px; }
+.bracket-match.sf { position:relative; width:100px; }
+.bracket-match.final { position:relative; width:110px; border:2px solid var(--accent); text-align:center; box-shadow:0 0 8px rgba(184,60,240,0.25); }
+.bracket-match.final::before,
+.bracket-match.final::after,
+.left-sf .sf::before,
+.right-sf .sf::after,
+.left .qf1::after,
+.left .qf2::after,
+.right .qf1::before,
+.right .qf2::before {
+    content: '';
+    position:absolute;
+    border-color:var(--line);
+    border-style:solid;
+}
+.left .qf1::after, .left .qf2::after { right:-38px; width:38px; height:81px; top:50%; border-width:0 2px 2px 0; }
+.right .qf1::before, .right .qf2::before { left:-38px; width:38px; height:81px; top:50%; border-width:0 0 2px 2px; }
+.left-sf .sf::before { left:-38px; width:38px; height:0; top:50%; border-width:2px 0 0; }
+.right-sf .sf::after { right:-38px; width:38px; height:0; top:50%; border-width:2px 0 0; }
+.left-sf .sf::after { right:-38px; width:38px; height:81px; top:50%; border-width:0 2px 2px 0; }
+.right-sf .sf::before { left:-38px; width:38px; height:81px; top:50%; border-width:0 0 2px 2px; }
+.left-sf .sf { transform:translateY(21px); }
+.right-sf .sf { transform:translateY(21px); }
+.bracket-match.final::before { left:-38px; width:38px; top:50%; border-width:2px 0 0; }
+.bracket-match.final::after { right:-38px; width:38px; top:50%; border-width:2px 0 0; }
+
+/* arrowheads for visual flow */
+.left .qf1::after, .left .qf2::after {
+    content: '▶';
+    right: -20px;
+    top: 50%;
+    transform: translateY(-50%) scale(0.7);
+    color: var(--accent);
+    border: none;
+    font-size: 0.8rem;
+}
+.right .qf1::before, .right .qf2::before {
+    content: '◀';
+    left: -20px;
+    top: 50%;
+    transform: translateY(-50%) scale(0.7);
+    color: var(--accent);
+    border: none;
+    font-size: 0.8rem;
+}
+.left-sf .sf::after {
+    content: '▶';
+    right: -20px;
+    top: 50%;
+    transform: translateY(-50%) scale(0.7);
+    color: var(--accent);
+    border: none;
+    font-size: 0.8rem;
+}
+.right-sf .sf::before {
+    content: '◀';
+    left: -20px;
+    top: 50%;
+    transform: translateY(-50%) scale(0.7);
+    color: var(--accent);
+    border: none;
+    font-size: 0.8rem;
+}
+.bracket-match.final::before {
+    content: '▶';
+    left: -20px;
+    top: 50%;
+    transform: translateY(-50%) scale(0.7);
+    color: var(--accent);
+    border: none;
+    font-size: 0.8rem;
+}
+.bracket-match.final::after {
+    content: '◀';
+    right: -20px;
+    top: 50%;
+    transform: translateY(-50%) scale(0.7);
+    color: var(--accent);
+    border: none;
+    font-size: 0.8rem;
+}
+
+.bracket-round { color:var(--accent); font-family:'Poppins',sans-serif; font-weight:600; font-size:.58rem; text-transform:uppercase; margin-bottom:.15rem; }
+.bracket-team { display:flex; justify-content:space-between; gap:.3rem; padding:.08rem 0; font-size:.68rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .bracket-team span { overflow:hidden; text-overflow:ellipsis; }
 .bracket-team.winner { font-weight:700; }
-.bracket-agg-mini { border-top:1px solid rgba(125,125,132,.35); margin-top:.25rem; padding-top:.25rem; color:var(--muted); font-size:.61rem; text-align:center; }
+.bracket-agg-mini { border-top:1px solid rgba(125,125,132,.35); margin-top:.2rem; padding-top:.2rem; color:var(--muted); font-size:.55rem; text-align:center; }
 .bracket-final-score { margin-top:.3rem; font-weight:700; font-size:.68rem; }
 .bracket-pending { opacity:.7; }
 
@@ -222,16 +294,30 @@ table.league-table tr.playoff-row td:first-child {
     table.league-table th, table.league-table td { padding: 4px 5px; }
     .club-sub { font-size: 0.78em; }
     .bracket-wrap { margin-left:-0.2rem; margin-right:-0.2rem; padding-left:.15rem; padding-right:.15rem; }
-    .bracket-board { min-width:620px; grid-template-columns:125px 115px 125px 115px 125px; grid-template-rows:repeat(7,46px); }
-    .bracket-match { width:125px; padding:.42rem .45rem; border-radius:7px; }
-    .bracket-match.qf1 { top:46px; } .bracket-match.qf2 { top:184px; }
-    .bracket-match.sf { width:115px; } .bracket-match.final { width:125px; }
-    .bracket-team { font-size:.62rem; } .bracket-round { font-size:.55rem; }
-    .bracket-agg-mini { font-size:.52rem; } .bracket-side-label { font-size:.55rem; }
+    .bracket-board {
+        min-width: 520px;
+        grid-template-columns: 100px 90px 100px 90px 100px;
+        grid-template-rows: repeat(7, 36px);
+    }
+    .bracket-match { width:100px; padding:.25rem .4rem; border-radius:5px; }
+    .bracket-match.qf1 { top:36px; } .bracket-match.qf2 { top:144px; }
+    .bracket-match.sf { width:90px; }
+    .bracket-match.final { width:100px; }
+    .bracket-team { font-size:.6rem; }
+    .bracket-round { font-size:.5rem; }
+    .bracket-agg-mini { font-size:.5rem; }
+    .bracket-side-label { font-size:.55rem; }
     .bracket-final-score { font-size:.58rem; }
-    .left .qf1::after,.left .qf2::after,.right .qf1::before,.right .qf2::before,.left-sf .sf::before,.left-sf .sf::after,.right-sf .sf::before,.right-sf .sf::after { width:24px; }
-    .left .qf1::after,.left .qf2::after,.right .qf1::before,.right .qf2::before,.left-sf .sf::after,.right-sf .sf::before { height:69px; }
-    .left-sf .sf::before,.right-sf .sf::after,.bracket-match.final::before,.bracket-match.final::after { width:24px; }
+    .left .qf1::after, .left .qf2::after, .right .qf1::before, .right .qf2::before,
+    .left-sf .sf::before, .left-sf .sf::after, .right-sf .sf::before, .right-sf .sf::after,
+    .bracket-match.final::before, .bracket-match.final::after {
+        width:24px;
+        font-size:0.6rem;
+        right:-16px;
+        left:-16px;
+    }
+    .left .qf1::after, .left .qf2::after, .right .qf1::before, .right .qf2::before,
+    .left-sf .sf::after, .right-sf .sf::before { height:69px; }
     .bracket-match.final::before { left:-24px; } .bracket-match.final::after { right:-24px; }
 
     /* fixture cards: give inputs/buttons a bit more breathing room */
@@ -556,6 +642,14 @@ elif page_key == "playoffs":
         st.markdown(f'<p class="muted" style="text-align:center;">{league["name"]}</p>', unsafe_allow_html=True)
         st.markdown('<p class="muted" style="text-align:center;">Top 8 knockout • Two-legged ties • Old UCL away-goal rule • One-match final</p>', unsafe_allow_html=True)
 
+        # Home/away clarification legend
+        st.markdown(
+            '<p class="muted" style="text-align:center; font-size:0.85rem;">'
+            '🏠 In two‑legged ties, the <strong>first leg</strong> is at the home of the <strong>first</strong> team listed; '
+            'the <strong>second leg</strong> at the home of the <strong>second</strong> team listed.</p>',
+            unsafe_allow_html=True
+        )
+
         def tie_data(tie, leg1_no, leg2_no):
             by_leg = {f["leg"]: f for f in tie}
             if leg1_no not in by_leg or leg2_no not in by_leg:
@@ -702,14 +796,14 @@ elif page_key == "playoffs":
                         elif league.get("status") == "active":
                             c1, c2, c3 = st.columns([1, 1, 1.25])
                             hs = c1.number_input(f"{label} H", min_value=0, max_value=20, step=1, key=f"po_hs_{f['id']}")
-                        aws = c2.number_input(f"{label} A", min_value=0, max_value=20, step=1, key=f"po_as_{f['id']}")
-                        if c3.button(f"Save {label}", key=f"po_played_{f['id']}", use_container_width=True):
-                            db.submit_result(f["id"], int(hs), int(aws))
-                            st.rerun()
-                st.caption(f"Aggregate: {agg[a]} – {agg[b]}  •  Away goals: {away[a]} – {away[b]}")
-                if winner:
-                    win_name = f1["home_ign"] if winner == a else f1["away_ign"]
-                    st.success(f"{win_name} advances ({reason}).")
+                            aws = c2.number_input(f"{label} A", min_value=0, max_value=20, step=1, key=f"po_as_{f['id']}")
+                            if c3.button(f"Save {label}", key=f"po_played_{f['id']}", use_container_width=True):
+                                db.submit_result(f["id"], int(hs), int(aws))
+                                st.rerun()
+                    st.caption(f"Aggregate: {agg[a]} – {agg[b]}  •  Away goals: {away[a]} – {away[b]}")
+                    if winner:
+                        win_name = f1["home_ign"] if winner == a else f1["away_ign"]
+                        st.success(f"{win_name} advances ({reason}).")
 
             for i, tie in enumerate(qf_groups, 1):
                 render_tie_editor(tie, f"QF {i}")
@@ -873,41 +967,39 @@ elif page_key == "admin":
 
         if not playoff_mode:
             st.markdown('<p class="section-title" style="font-size: 1rem;">League deadlines</p>', unsafe_allow_html=True)
-            raw_deadline = active_league.get("deadline")
-            current_deadline_date = date.fromisoformat(raw_deadline) if raw_deadline else None
-            deadline_passed = leg_deadline_passed(active_league, 1)
-            if current_deadline_date:
-                label = "passed — overdue fixtures were auto-resolved" if deadline_passed else "upcoming"
-                st.markdown(f'<p class="muted">Leg 1 deadline: <b>{current_deadline_date.strftime("%d %b %Y")}, 12:00 PM</b> ({label}).</p>', unsafe_allow_html=True)
-            else:
-                st.markdown('<p class="muted">No Leg 1 deadline set.</p>', unsafe_allow_html=True)
+            # Loop over legs to reduce duplication
+            for leg in (1, 2):
+                if leg == 1:
+                    raw = active_league.get("deadline")
+                    current = date.fromisoformat(raw) if raw else None
+                    passed = leg_deadline_passed(active_league, 1)
+                    label = "Leg 1"
+                    input_key = "deadline_input"
+                    update_func = db.set_league_deadline
+                    clear_func = lambda lid: db.set_league_deadline(lid, None)
+                else:
+                    raw = active_league.get("leg2_deadline")
+                    current = date.fromisoformat(raw) if raw else None
+                    passed = leg_deadline_passed(active_league, 2)
+                    label = "Leg 2"
+                    input_key = "leg2_deadline_admin_input"
+                    update_func = db.set_league_leg2_deadline
+                    clear_func = lambda lid: db.set_league_leg2_deadline(lid, None)
 
-            new_deadline = st.date_input("Set / change Leg 1 deadline", value=current_deadline_date or date.today(), key="deadline_input")
-            dc1, dc2 = st.columns(2)
-            if dc1.button("Update Leg 1 deadline", use_container_width=True):
-                db.set_league_deadline(active_league["id"], new_deadline)
-                st.rerun()
-            if dc2.button("Clear Leg 1 deadline", use_container_width=True, disabled=not current_deadline_date):
-                db.set_league_deadline(active_league["id"], None)
-                st.rerun()
+                if current:
+                    status = "passed — overdue fixtures were auto-resolved" if passed else "upcoming"
+                    st.markdown(f'<p class="muted">{label} deadline: <b>{current.strftime("%d %b %Y")}, 12:00 PM</b> ({status}).</p>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<p class="muted">No {label} deadline set.</p>', unsafe_allow_html=True)
 
-            raw_leg2_deadline = active_league.get("leg2_deadline")
-            current_leg2_deadline_date = date.fromisoformat(raw_leg2_deadline) if raw_leg2_deadline else None
-            leg2_deadline_passed = leg_deadline_passed(active_league, 2)
-            if current_leg2_deadline_date:
-                label = "passed — overdue fixtures were auto-resolved" if leg2_deadline_passed else "upcoming"
-                st.markdown(f'<p class="muted">Leg 2 deadline: <b>{current_leg2_deadline_date.strftime("%d %b %Y")}, 12:00 PM</b> ({label}).</p>', unsafe_allow_html=True)
-            else:
-                st.markdown('<p class="muted">No Leg 2 deadline set.</p>', unsafe_allow_html=True)
-
-            new_leg2_deadline = st.date_input("Set / change Leg 2 deadline", value=current_leg2_deadline_date or date.today(), key="leg2_deadline_admin_input")
-            lc1, lc2 = st.columns(2)
-            if lc1.button("Update Leg 2 deadline", use_container_width=True):
-                db.set_league_leg2_deadline(active_league["id"], new_leg2_deadline)
-                st.rerun()
-            if lc2.button("Clear Leg 2 deadline", use_container_width=True, disabled=not current_leg2_deadline_date):
-                db.set_league_leg2_deadline(active_league["id"], None)
-                st.rerun()
+                new_date = st.date_input(f"Set / change {label} deadline", value=current or date.today(), key=f"{input_key}_{leg}")
+                col1, col2 = st.columns(2)
+                if col1.button(f"Update {label} deadline", key=f"update_deadline_{leg}", use_container_width=True):
+                    update_func(active_league["id"], new_date)
+                    st.rerun()
+                if col2.button(f"Clear {label} deadline", key=f"clear_deadline_{leg}", use_container_width=True, disabled=not current):
+                    clear_func(active_league["id"])
+                    st.rerun()
 
             st.markdown('<p class="section-title" style="font-size: 1rem;">Leg 2 lock</p>', unsafe_allow_html=True)
             if active_league["leg2_unlocked"]:
@@ -1046,3 +1138,4 @@ elif page_key == "admin":
             if c3.button("🗑️ Delete", key=f"del_league_{lg['id']}", disabled=not confirm):
                 db.delete_league(lg["id"])
                 st.rerun()
+```
