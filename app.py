@@ -10,16 +10,19 @@ st.set_page_config(page_title="PES With the Bois", page_icon="🟣", layout="wid
 PAGE_LABELS = {
     "home": "Home",
     "fixtures": "Fixtures",
+    "playoffs": "Playoffs",
     "table": "League Standing",
     "history": "History",
     "register": "Register",
     "rules": "Rules",
     "admin": "Admin",
     "edit_closed": "Edit Closed Fixtures",
+    
 }
 
 PAGE_ICONS = {
     "fixtures": "⚽",
+    "playoffs": "🏆",
     "table": "🏆",
     "history": "📜",
     "register": "➕",
