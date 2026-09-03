@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 IST = ZoneInfo("Asia/Kolkata")
 
-st.set_page_config(page_title="PES With the Bois", page_icon="🟣", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="PES with the Bois", page_icon="🟣", layout="wide", initial_sidebar_state="collapsed")
 
 PAGE_LABELS = {
     "home": "Home",
