@@ -171,46 +171,37 @@ table.league-table tr.playoff-row td:first-child {
 .tie-meta { color: var(--muted); font-size: 0.8rem; }
 
 .bracket-wrap {
-    width: 100%;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding: .7rem 0 1.4rem;
+    width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    padding: .5rem 0 1.4rem;
 }
 .bracket-board {
-    min-width: 760px;
-    height: 390px;
-    display: grid;
-    grid-template-columns: 1fr 150px 150px 150px 1fr;
-    position: relative;
-    align-items: center;
-    padding: 1.8rem .3rem .3rem;
-    box-sizing: border-box;
+    min-width: 720px; display:grid;
+    grid-template-columns: minmax(150px,1fr) 150px 150px 150px minmax(150px,1fr);
+    grid-template-rows: repeat(7,54px); align-items:center; position:relative;
+    padding:.4rem .3rem;
 }
-.bracket-col { position: relative; height: 100%; }
-.bracket-col.left { grid-column: 1; }
-.bracket-col.left-sf { grid-column: 2; display:flex; align-items:center; justify-content:center; }
-.bracket-col.final { grid-column: 3; display:flex; align-items:center; justify-content:center; }
-.bracket-col.right-sf { grid-column: 4; display:flex; align-items:center; justify-content:center; }
-.bracket-col.right { grid-column: 5; }
-.bracket-side-label { position:absolute; top:0; width:100%; text-align:center; color:var(--accent); font-family:'Poppins',sans-serif; font-weight:600; font-size:.66rem; letter-spacing:.35px; text-transform:uppercase; }
+.bracket-col { position:relative; height:100%; }
+.bracket-col.left { grid-column:1; grid-row:1/-1; }
+.bracket-col.left-sf { grid-column:2; grid-row:1/-1; display:flex; align-items:center; justify-content:center; }
+.bracket-col.final { grid-column:3; grid-row:1/-1; display:flex; align-items:center; justify-content:center; }
+.bracket-col.right-sf { grid-column:4; grid-row:1/-1; display:flex; align-items:center; justify-content:center; }
+.bracket-col.right { grid-column:5; grid-row:1/-1; }
+.bracket-side-label { position:absolute; top:-.1rem; width:100%; text-align:center; color:var(--accent); font-family:'Poppins',sans-serif; font-weight:600; font-size:.68rem; letter-spacing:.35px; text-transform:uppercase; }
 .bracket-match { position:absolute; width:150px; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:.5rem .65rem; box-sizing:border-box; }
 .bracket-match.left-match { right:0; }
 .bracket-match.right-match { left:0; }
-.bracket-match.qf1 { top:48px; }
-.bracket-match.qf2 { top:242px; }
+.bracket-match.qf1 { top:54px; }
+.bracket-match.qf2 { top:216px; }
 .bracket-match.sf { position:relative; width:150px; }
 .bracket-match::after,.bracket-match::before { content:''; position:absolute; border-color:var(--line); border-style:solid; }
-/* left side flows inward: QF1/QF2 join at SF1 */
-.left .qf1::after { right:-38px; width:38px; height:97px; top:50%; border-width:0 1px 1px 0; }
-.left .qf2::after { right:-38px; width:38px; height:97px; top:-48px; border-width:1px 1px 0 0; }
-.left-sf .sf::before { left:-38px; width:38px; top:50%; border-width:1px 0 0; }
-.left-sf .sf::after { right:-38px; width:38px; top:50%; border-width:1px 0 0; }
-/* right side is an exact mirror */
-.right .qf1::before { left:-38px; width:38px; height:97px; top:50%; border-width:0 0 1px 1px; }
-.right .qf2::before { left:-38px; width:38px; height:97px; top:-48px; border-width:1px 0 0 1px; }
-.right-sf .sf::after { right:-38px; width:38px; top:50%; border-width:1px 0 0; }
-.right-sf .sf::before { left:-38px; width:38px; top:50%; border-width:1px 0 0; }
-.left-sf .sf, .right-sf .sf { transform:translateY(0); }
+.left .qf1::after,.left .qf2::after { right:-38px; width:38px; height:81px; top:50%; border-width:0 1px 1px 0; }
+.right .qf1::before,.right .qf2::before { left:-38px; width:38px; height:81px; top:50%; border-width:0 0 1px 1px; }
+.left-sf .sf::before { left:-38px; width:38px; height:0; top:50%; border-width:1px 0 0; }
+.right-sf .sf::after { right:-38px; width:38px; height:0; top:50%; border-width:1px 0 0; }
+.left-sf .sf::after { right:-38px; width:38px; height:81px; top:50%; border-width:0 1px 1px 0; }
+.right-sf .sf::before { left:-38px; width:38px; height:81px; top:50%; border-width:0 0 1px 1px; }
+.left-sf .sf { transform:translateY(27px); }
+.right-sf .sf { transform:translateY(27px); }
 .bracket-match.final { position:relative; width:145px; border:1.5px solid var(--accent); text-align:center; box-shadow:0 0 0 1px var(--accent-soft); }
 .bracket-match.final::before { left:-38px; width:38px; top:50%; border-width:1px 0 0; }
 .bracket-match.final::after { right:-38px; width:38px; top:50%; border-width:1px 0 0; }
@@ -231,17 +222,16 @@ table.league-table tr.playoff-row td:first-child {
     table.league-table th, table.league-table td { padding: 4px 5px; }
     .club-sub { font-size: 0.78em; }
     .bracket-wrap { margin-left:-0.2rem; margin-right:-0.2rem; padding-left:.15rem; padding-right:.15rem; }
-    .bracket-board { min-width:660px; height:330px; grid-template-columns:130px 110px 120px 110px 130px; padding-top:1.5rem; }
-    .bracket-match { width:130px; padding:.42rem .45rem; border-radius:7px; }
-    .bracket-match.qf1 { top:42px; } .bracket-match.qf2 { top:202px; }
-    .bracket-match.sf { width:110px; } .bracket-match.final { width:120px; }
+    .bracket-board { min-width:620px; grid-template-columns:125px 115px 125px 115px 125px; grid-template-rows:repeat(7,46px); }
+    .bracket-match { width:125px; padding:.42rem .45rem; border-radius:7px; }
+    .bracket-match.qf1 { top:46px; } .bracket-match.qf2 { top:184px; }
+    .bracket-match.sf { width:115px; } .bracket-match.final { width:125px; }
     .bracket-team { font-size:.62rem; } .bracket-round { font-size:.55rem; }
-    .bracket-agg-mini { font-size:.52rem; } .bracket-side-label { font-size:.52rem; }
+    .bracket-agg-mini { font-size:.52rem; } .bracket-side-label { font-size:.55rem; }
     .bracket-final-score { font-size:.58rem; }
-    .left .qf1::after,.left .qf2::after,.right .qf1::before,.right .qf2::before { width:24px; }
-    .left .qf1::after,.right .qf1::before { height:80px; }
-    .left .qf2::after,.right .qf2::before { height:80px; top:-40px; }
-    .left-sf .sf::before,.left-sf .sf::after,.right-sf .sf::before,.right-sf .sf::after,.bracket-match.final::before,.bracket-match.final::after { width:24px; }
+    .left .qf1::after,.left .qf2::after,.right .qf1::before,.right .qf2::before,.left-sf .sf::before,.left-sf .sf::after,.right-sf .sf::before,.right-sf .sf::after { width:24px; }
+    .left .qf1::after,.left .qf2::after,.right .qf1::before,.right .qf2::before,.left-sf .sf::after,.right-sf .sf::before { height:69px; }
+    .left-sf .sf::before,.right-sf .sf::after,.bracket-match.final::before,.bracket-match.final::after { width:24px; }
     .bracket-match.final::before { left:-24px; } .bracket-match.final::after { right:-24px; }
 
     /* fixture cards: give inputs/buttons a bit more breathing room */
@@ -591,6 +581,22 @@ elif page_key == "playoffs":
                     winner, reason = min((a, b), key=lambda pid: seeds.get(pid, 99)), "higher league seed"
             return f1, f2, a, b, agg, away, winner, reason
 
+        def grouped_ties(fixtures, leg1_no, leg2_no):
+            """Group the two legs of each knockout tie by the two player IDs.
+            Always returns groups in deterministic order, based on the fixture
+            creation order supplied by the database."""
+            groups = {}
+            order = []
+            for f in fixtures:
+                if f["leg"] not in (leg1_no, leg2_no):
+                    continue
+                key = tuple(sorted((f["home_player_id"], f["away_player_id"])))
+                if key not in groups:
+                    groups[key] = []
+                    order.append(key)
+                groups[key].append(f)
+            return [groups[k] for k in order]
+
         def tie_label(tie, leg1_no, leg2_no):
             data = tie_data(tie, leg1_no, leg2_no)
             if not data:
@@ -601,18 +607,6 @@ elif page_key == "playoffs":
                 f'{agg[a]} – {agg[b]}' if any(f["played"] for f in (f1, f2)) else "–",
                 winner, reason,
             )
-
-        # Group the two legs belonging to each knockout tie.  The helper lives
-        # in db.py as _tie_groups; keep a local wrapper so the UI does not
-        # depend on a separate undefined function.
-        def grouped_ties(fixtures, leg1, leg2):
-            groups = {}
-            for f in fixtures:
-                if f.get("leg") not in (leg1, leg2):
-                    continue
-                key = tuple(sorted((f.get("home_player_id"), f.get("away_player_id"))))
-                groups.setdefault(key, []).append(f)
-            return list(groups.values())
 
         qf_groups = grouped_ties(qfs, db.QF_LEG1, db.QF_LEG2)
         sf_groups = grouped_ties(sfs, db.SF_LEG1, db.SF_LEG2)
@@ -654,14 +648,14 @@ elif page_key == "playoffs":
             else: final_left,final_right,final_score='Winner SF 1','Winner SF 2','FINAL AWAITS'
 
             visual=f'''<div class="bracket-wrap"><div class="bracket-board">
-                <div class="bracket-col left"><div class="bracket-side-label">QUARTER-FINALS · LEFT PATH</div>
+                <div class="bracket-col left"><div class="bracket-side-label">QF · PATH A</div>
                     {match_card(left_qfs[0],'left') if len(left_qfs)>0 else ''}{match_card(left_qfs[1],'left') if len(left_qfs)>1 else ''}</div>
                 <div class="bracket-col left-sf">{sf_html(left_sf,'SF 1',1,2)}</div>
                 <div class="bracket-col final"><div class="bracket-match final"><div class="bracket-round">🏆 FINAL · ONE MATCH</div>
                     <div class="bracket-team"><span>{final_left}</span></div><div class="bracket-team"><span>{final_right}</span></div>
                     <div class="bracket-final-score">{final_score}</div></div></div>
                 <div class="bracket-col right-sf">{sf_html(right_sf,'SF 2',3,4)}</div>
-                <div class="bracket-col right"><div class="bracket-side-label">RIGHT PATH · QUARTER-FINALS</div>
+                <div class="bracket-col right"><div class="bracket-side-label">PATH B · QF</div>
                     {match_card(right_qfs[0],'right') if len(right_qfs)>0 else ''}{match_card(right_qfs[1],'right') if len(right_qfs)>1 else ''}</div>
             </div></div>'''
             st.markdown(visual,unsafe_allow_html=True)
@@ -669,45 +663,53 @@ elif page_key == "playoffs":
             st.markdown('<div class="knockout-title">Match results</div>', unsafe_allow_html=True)
 
             def render_tie_editor(tie, title):
-                leg1 = db.QF_LEG1 if title.startswith("QF") else db.SF_LEG1
-                leg2 = db.QF_LEG2 if title.startswith("QF") else db.SF_LEG2
-                data = tie_data(tie, leg1, leg2)
+                is_qf = title.startswith("QF")
+                leg1_no = db.QF_LEG1 if is_qf else db.SF_LEG1
+                leg2_no = db.QF_LEG2 if is_qf else db.SF_LEG2
+                data = tie_data(tie, leg1_no, leg2_no)
                 if not data:
                     return
                 f1, f2, a, b, agg, away, winner, reason = data
+                round_has_next = db._round_exists(db.list_fixtures(league["id"]), (db.SF_LEG1, db.SF_LEG2)) if is_qf else db._round_exists(db.list_fixtures(league["id"]), (db.FINAL_LEG,))
+    
                 with st.container(border=True):
-                    st.markdown(f'**{title}** — {f1["home_ign"]} vs {f1["away_ign"]}')
+                    st.markdown(f"**{title}** — {f1['home_ign']} vs {f1['away_ign']}")
                     for label, f in (("Leg 1", f1), ("Leg 2", f2)):
                         if f["played"]:
-                            st.markdown(f'**{label}:** {f["home_score"]} – {f["away_score"]}')
-                            # Keep the same safe two-step Undo flow used by league fixtures.
-                            confirm_key = f"po_confirm_undo_{f['id']}"
-                            if st.session_state.get(confirm_key):
-                                st.markdown('<p class="muted">Undo this playoff result?</p>', unsafe_allow_html=True)
-                                uc1, uc2 = st.columns(2)
-                                if uc1.button("Yes, undo", key=f"po_undo_yes_{f['id']}", use_container_width=True):
-                                    db.unmark_result(f["id"])
-                                    st.session_state[confirm_key] = False
-                                    st.toast("Playoff result undone.", icon="↩️")
-                                    st.rerun()
-                                if uc2.button("Cancel", key=f"po_undo_no_{f['id']}", use_container_width=True):
-                                    st.session_state[confirm_key] = False
-                                    st.rerun()
-                            elif league.get("status") == "active":
-                                if st.button("Undo", key=f"po_undo_{f['id']}", use_container_width=True):
-                                    st.session_state[confirm_key] = True
-                                    st.rerun()
+                            c1, c2 = st.columns([3, 1])
+                            c1.markdown(f"**{label}:** :green[**{f['home_score']} – {f['away_score']}**]")
+                            # A completed earlier round cannot be undone after the
+                            # next round exists, otherwise the downstream fixtures
+                            # would contain stale teams. Current-round results keep
+                            # the normal Undo flow.
+                            if not round_has_next and league.get("status") == "active":
+                                undo_key = f"po_undo_confirm_{f['id']}"
+                                if st.session_state.get(undo_key):
+                                    c1.caption("Undo this result?")
+                                    if c2.button("Yes, undo", key=f"po_undo_yes_{f['id']}", use_container_width=True):
+                                        db.unmark_result(f["id"])
+                                        st.session_state.pop(undo_key, None)
+                                        st.rerun()
+                                    if c2.button("Cancel", key=f"po_undo_no_{f['id']}", use_container_width=True):
+                                        st.session_state.pop(undo_key, None)
+                                        st.rerun()
+                                else:
+                                    if c2.button("Undo", key=f"po_undo_{f['id']}", use_container_width=True):
+                                        st.session_state[undo_key] = True
+                                        st.rerun()
+                            elif round_has_next:
+                                c2.caption("🔒 Round advanced")
                         elif league.get("status") == "active":
                             c1, c2, c3 = st.columns([1, 1, 1.25])
                             hs = c1.number_input(f"{label} H", min_value=0, max_value=20, step=1, key=f"po_hs_{f['id']}")
-                            aws = c2.number_input(f"{label} A", min_value=0, max_value=20, step=1, key=f"po_as_{f['id']}")
-                            if c3.button(f"Save {label}", key=f"po_played_{f['id']}", use_container_width=True):
-                                db.submit_result(f["id"], int(hs), int(aws))
-                                st.rerun()
-                    st.caption(f"Aggregate: {agg[a]} – {agg[b]}  •  Away goals: {away[a]} – {away[b]}")
-                    if winner:
-                        win_name = f1["home_ign"] if winner == a else f1["away_ign"]
-                        st.success(f"{win_name} advances ({reason}).")
+                        aws = c2.number_input(f"{label} A", min_value=0, max_value=20, step=1, key=f"po_as_{f['id']}")
+                        if c3.button(f"Save {label}", key=f"po_played_{f['id']}", use_container_width=True):
+                            db.submit_result(f["id"], int(hs), int(aws))
+                            st.rerun()
+                st.caption(f"Aggregate: {agg[a]} – {agg[b]}  •  Away goals: {away[a]} – {away[b]}")
+                if winner:
+                    win_name = f1["home_ign"] if winner == a else f1["away_ign"]
+                    st.success(f"{win_name} advances ({reason}).")
 
             for i, tie in enumerate(qf_groups, 1):
                 render_tie_editor(tie, f"QF {i}")
@@ -720,23 +722,23 @@ elif page_key == "playoffs":
                 with st.container(border=True):
                     st.markdown(f'**{f["home_ign"]}** vs **{f["away_ign"]}**')
                     if f["played"]:
-                        st.markdown(f':green[🏆 **{f["home_score"]} – {f["away_score"]}**]')
-                        confirm_key = f"po_confirm_undo_{f['id']}"
-                        if st.session_state.get(confirm_key):
-                            st.markdown('<p class="muted">Undo this final result?</p>', unsafe_allow_html=True)
-                            uc1, uc2 = st.columns(2)
-                            if uc1.button("Yes, undo", key=f"po_undo_yes_{f['id']}", use_container_width=True):
-                                db.unmark_result(f["id"])
-                                st.session_state[confirm_key] = False
-                                st.toast("Final result undone.", icon="↩️")
-                                st.rerun()
-                            if uc2.button("Cancel", key=f"po_undo_no_{f['id']}", use_container_width=True):
-                                st.session_state[confirm_key] = False
-                                st.rerun()
-                        elif league.get("status") == "active":
-                            if st.button("Undo", key=f"po_undo_{f['id']}", use_container_width=True):
-                                st.session_state[confirm_key] = True
-                                st.rerun()
+                        c1, c2 = st.columns([3, 1])
+                        c1.markdown(f':green[🏆 **{f["home_score"]} – {f["away_score"]}**]')
+                        if league.get("status") == "active":
+                            undo_key = f"po_final_undo_confirm_{f['id']}"
+                            if st.session_state.get(undo_key):
+                                c2.caption("Undo this result?")
+                                if c2.button("Yes, undo", key=f"po_final_undo_yes_{f['id']}", use_container_width=True):
+                                    db.unmark_result(f["id"])
+                                    st.session_state.pop(undo_key, None)
+                                    st.rerun()
+                                if c2.button("Cancel", key=f"po_final_undo_no_{f['id']}", use_container_width=True):
+                                    st.session_state.pop(undo_key, None)
+                                    st.rerun()
+                            else:
+                                if c2.button("Undo", key=f"po_final_undo_{f['id']}", use_container_width=True):
+                                    st.session_state[undo_key] = True
+                                    st.rerun()
                         champion = db.playoff_champion(league["id"])
                         if champion:
                             winner_name = f["home_ign"] if champion == f["home_player_id"] else f["away_ign"]
