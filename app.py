@@ -667,7 +667,7 @@ elif page_key == "playoffs":
         final = [f for f in fixtures if f["leg"] == db.FINAL_LEG]
 
         st.markdown(f'<p class="muted" style="text-align:center;">{league["name"]}</p>', unsafe_allow_html=True)
-        st.markdown('<p class="muted" style="text-align:center;">Top 8 knockout • Two-legged ties • Old UCL away-goal rule • One-match final</p>', unsafe_allow_html=True)
+        st.markdown('<p class="muted" style="text-align:center;">Top 8 knockout • Two-legged ties</p>', unsafe_allow_html=True)
 
         # Home/away clarification legend
         st.markdown(
