@@ -1138,4 +1138,4 @@ elif page_key == "admin":
             if c3.button("🗑️ Delete", key=f"del_league_{lg['id']}", disabled=not confirm):
                 db.delete_league(lg["id"])
                 st.rerun()
-```
+
