@@ -10,20 +10,18 @@ st.set_page_config(page_title="PES With the Bois", page_icon="🟣", layout="wid
 PAGE_LABELS = {
     "home": "Home",
     "fixtures": "Fixtures",
-    "playoffs": "Playoffs",
     "table": "League Standing",
+    "playoffs": "Playoffs",
     "history": "History",
     "register": "Register",
     "rules": "Rules",
     "admin": "Admin",
-    "edit_closed": "Edit Closed Fixtures",
-    
 }
 
 PAGE_ICONS = {
     "fixtures": "⚽",
-    "playoffs": "🏆",
     "table": "🏆",
+    "playoffs": "🥇",
     "history": "📜",
     "register": "➕",
     "rules": "📋",
@@ -138,6 +136,39 @@ table.league-table th {
 }
 table.league-table tr:hover td { background-color: var(--accent-soft); }
 table.league-table td.rank { color: var(--accent); font-weight: 600; }
+table.league-table tr.playoff-row td:first-child {
+    box-shadow: inset 4px 0 0 #3b82f6;
+}
+.playoff-marker-legend {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--muted);
+    font-size: 0.82rem;
+    margin: 0.35rem 0 0.8rem 0;
+}
+.playoff-marker {
+    display: inline-block;
+    width: 4px;
+    height: 18px;
+    background: #3b82f6;
+    border-radius: 2px;
+}
+.knockout-title {
+    font-family: 'Poppins', sans-serif;
+    font-weight: 600;
+    color: var(--text);
+    font-size: 1.2rem;
+    margin: 1.5rem 0 0.7rem;
+}
+.tie-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 0.9rem;
+    margin-bottom: 0.8rem;
+}
+.tie-meta { color: var(--muted); font-size: 0.8rem; }
 
 @media (max-width: 640px) {
     .block-container { padding-left: 0.6rem; padding-right: 0.6rem; }
@@ -210,7 +241,7 @@ div[data-testid="stStatusWidget"] {
 """, unsafe_allow_html=True)
 
 
-def render_table(rows: list[dict]):
+def render_table(rows: list[dict], top8_marker: bool = False):
     """Renders a list of dicts as the sketch-style bordered table."""
     if not rows:
         st.markdown('<p class="muted">No results yet.</p>', unsafe_allow_html=True)
@@ -220,8 +251,9 @@ def render_table(rows: list[dict]):
     for c in cols:
         html.append(f"<th>{c}</th>")
     html.append("</tr></thead><tbody>")
-    for r in rows:
-        html.append("<tr>")
+    for row_index, r in enumerate(rows):
+        row_class = ' class="playoff-row"' if top8_marker and row_index < 8 else ''
+        html.append(f"<tr{row_class}>")
         for i, c in enumerate(cols):
             cls = ' class="rank"' if i == 0 else ""
             html.append(f"<td{cls}>{r[c]}</td>")
@@ -291,7 +323,7 @@ maybe_auto_resolve()
 if page_key == "home":
     st.markdown('<div style="height: 0.8rem;"></div>', unsafe_allow_html=True)
 
-    tile_rows = [["fixtures", "table"], ["history", "register"], ["rules", "playoffs"], ["admin"]]
+    tile_rows = [["fixtures", "table"], ["playoffs", "history"], ["register", "rules"], ["admin"]]
     for row in tile_rows:
         cols = st.columns(len(row)) if len(row) > 1 else [st.columns([1, 2, 1])[1]]
         for i, key in enumerate(row):
@@ -311,7 +343,8 @@ elif page_key == "fixtures":
         st.info("No active league right now. An admin needs to start one.")
     else:
         st.markdown(f'<div class="section-title">{league["name"]}</div>', unsafe_allow_html=True)
-        fixtures = db.list_fixtures(league["id"])
+        # This page is for the league stage only; knockout matches live on Playoffs.
+        fixtures = [f for f in db.list_fixtures(league["id"]) if f["leg"] in (1, 2)]
 
         leg1_closed = leg_deadline_passed(league, 1)
         leg2_closed = leg_deadline_passed(league, 2)
@@ -442,7 +475,128 @@ elif page_key == "table":
     else:
         st.markdown(f'<p class="muted" style="text-align:center;">{league["name"]}</p>', unsafe_allow_html=True)
         table = db.get_standings(league["id"])
-        render_table(standings_rows(table))
+        if len(table) >= 8:
+            st.markdown('<div class="playoff-marker-legend"><span class="playoff-marker"></span> Top 8 — playoff qualification</div>', unsafe_allow_html=True)
+        render_table(standings_rows(table), top8_marker=True)
+
+
+# ------------------------------------------------------------------ Playoffs --
+elif page_key == "playoffs":
+    league = db.get_active_league()
+    if not league:
+        completed = db.list_completed_leagues()
+        league = completed[0] if completed else None
+
+    if not league:
+        st.info("No league or playoff bracket exists yet.")
+    else:
+        # If the league is active, this also creates the next round automatically
+        # after all two-legged ties in the current round are complete.
+        if league.get("status") == "active":
+            db.advance_playoffs(league["id"])
+
+        fixtures = db.list_fixtures(league["id"])
+        qfs = [f for f in fixtures if f["leg"] in (db.QF_LEG1, db.QF_LEG2)]
+        sfs = [f for f in fixtures if f["leg"] in (db.SF_LEG1, db.SF_LEG2)]
+        final = [f for f in fixtures if f["leg"] == db.FINAL_LEG]
+
+        st.markdown(f'<p class="muted" style="text-align:center;">{league["name"]}</p>', unsafe_allow_html=True)
+        st.markdown('<p class="muted" style="text-align:center;">Top 8 knockout • Two-legged ties • Old UCL away-goal rule • One-match final</p>', unsafe_allow_html=True)
+
+        def render_tie(tie, title, leg1_no, leg2_no):
+            by_leg = {f["leg"]: f for f in tie}
+            if leg1_no not in by_leg or leg2_no not in by_leg:
+                return
+            f1, f2 = by_leg[leg1_no], by_leg[leg2_no]
+            teams = [f1["home_player_id"], f1["away_player_id"]]
+            a, b = teams
+            agg = {a: 0, b: 0}
+            away = {a: 0, b: 0}
+            for f in (f1, f2):
+                if f["played"]:
+                    agg[f["home_player_id"]] += f["home_score"]
+                    agg[f["away_player_id"]] += f["away_score"]
+                    away[f["away_player_id"]] += f["away_score"]
+
+            with st.container(border=True):
+                st.markdown(f"**{title}**")
+                for leg_label, f in (("Leg 1", f1), ("Leg 2", f2)):
+                    st.caption(leg_label)
+                    if f["played"]:
+                        st.markdown(f"**{f['home_ign']}** ({f['home_club_name']})  **{f['home_score']} – {f['away_score']}**  **{f['away_ign']}** ({f['away_club_name']})")
+                    elif league.get("status") == "active":
+                        c1, c2, c3 = st.columns([1, 1, 1.5])
+                        hs = c1.number_input("Home", min_value=0, max_value=20, step=1, key=f"po_hs_{f['id']}")
+                        aws = c2.number_input("Away", min_value=0, max_value=20, step=1, key=f"po_as_{f['id']}")
+                        c3.markdown(f"<div style='padding-top:0.55rem; font-size:0.9rem;'>{f['home_ign']} vs {f['away_ign']}</div>", unsafe_allow_html=True)
+                        if c3.button("✅ Played", key=f"po_played_{f['id']}", use_container_width=True):
+                            try:
+                                db.submit_result(f["id"], int(hs), int(aws))
+                                st.rerun()
+                            except Exception as e:
+                                st.error(str(e))
+                    else:
+                        st.markdown(f"**{f['home_ign']}** vs **{f['away_ign']}**  ·  ⏳ Pending")
+
+                st.markdown(f"**Aggregate:** {agg[a]} – {agg[b]} &nbsp; · &nbsp; **Away goals:** {away[a]} – {away[b]}")
+                if all(f["played"] for f in (f1, f2)):
+                    if agg[a] != agg[b]:
+                        leader = a if agg[a] > agg[b] else b
+                        reason = "aggregate"
+                    elif away[a] != away[b]:
+                        leader = a if away[a] > away[b] else b
+                        reason = "away goals"
+                    else:
+                        seeds = {r["player_id"]: i + 1 for i, r in enumerate(db.get_standings(league["id"])[:8])}
+                        leader = min((a, b), key=lambda pid: seeds.get(pid, 99))
+                        reason = "higher league seed"
+                    name = f1["home_ign"] if leader == a else f1["away_ign"]
+                    st.success(f"Advances: {name} ({reason})")
+
+        def grouped_ties(fs, leg1, leg2):
+            groups = {}
+            for f in fs:
+                key = tuple(sorted((f["home_player_id"], f["away_player_id"])))
+                groups.setdefault(key, []).append(f)
+            return list(groups.values())
+
+        qf_groups = grouped_ties(qfs, db.QF_LEG1, db.QF_LEG2)
+        sf_groups = grouped_ties(sfs, db.SF_LEG1, db.SF_LEG2)
+
+        if qf_groups:
+            st.markdown('<div class="knockout-title">Quarter-finals</div>', unsafe_allow_html=True)
+            for i, tie in enumerate(qf_groups, 1):
+                render_tie(tie, f"QF {i}", db.QF_LEG1, db.QF_LEG2)
+        if sf_groups:
+            st.markdown('<div class="knockout-title">Semi-finals</div>', unsafe_allow_html=True)
+            for i, tie in enumerate(sf_groups, 1):
+                render_tie(tie, f"SF {i}", db.SF_LEG1, db.SF_LEG2)
+        if final:
+            f = final[0]
+            st.markdown('<div class="knockout-title">Final</div>', unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown(f"### {f['home_ign']} ({f['home_club_name']}) vs {f['away_ign']} ({f['away_club_name']})")
+                if f["played"]:
+                    st.markdown(f":green[🏆 **{f['home_score']} – {f['away_score']}**]")
+                    champion = db.playoff_champion(league["id"])
+                    if champion:
+                        winner_name = f["home_ign"] if champion == f["home_player_id"] else f["away_ign"]
+                        st.success(f"Champion: {winner_name}")
+                elif league.get("status") == "active":
+                    c1, c2, c3 = st.columns([1, 1, 1.4])
+                    hs = c1.number_input("Home", min_value=0, max_value=20, step=1, key=f"po_final_hs_{f['id']}")
+                    aws = c2.number_input("Away", min_value=0, max_value=20, step=1, key=f"po_final_as_{f['id']}")
+                    c3.markdown("<div style='height: 1.6rem'></div>", unsafe_allow_html=True)
+                    if c3.button("✅ Final played", key=f"po_final_{f['id']}", use_container_width=True):
+                        try:
+                            db.submit_result(f["id"], int(hs), int(aws))
+                            st.rerun()
+                        except Exception as e:
+                            st.error(str(e))
+                else:
+                    st.info("Final is ready but the season is already archived.")
+        elif not qf_groups:
+            st.info("The top-8 playoff bracket will appear here once the league stage is completed.")
 
 
 # ------------------------------------------------------------------- History --
@@ -456,7 +610,7 @@ elif page_key == "history":
             winner_str = f"{winner['ign']} ({winner['club_name']})" if winner else "—"
             with st.expander(f"🏆 {lg['name']} — winner: {winner_str}"):
                 table = db.get_standings(lg["id"])
-                render_table(standings_rows(table))
+                render_table(standings_rows(table), top8_marker=True)
 
 
 # ------------------------------------------------------------------ Register --
@@ -490,7 +644,9 @@ elif page_key == "rules":
 1. **Register** — enter your club name and IGN, wait for admin approval.
 2. **Check Fixtures** — you don't have to play in order, any fixture on your list can be played whenever.
 3. **After a match, update the score from the Fixtures page** — find your name and your opponent's name, put in the scores, and click **Played**.
-4. **In-game rules** — keep Extra Time and Penalties turned OFF.
+4. **In-game rules** — keep Extra Time and Penalties turned OFF for league matches.
+5. **Playoffs** — the top 8 enter quarter-finals, then semi-finals, with Home & Away ties until the single-match final.
+6. **Away goals** — if a two-legged tie is level on aggregate, the team with more away goals advances. If away goals are also level, the higher league seed advances.
 """)
 
 
@@ -502,6 +658,8 @@ elif page_key == "admin":
         st.stop()
 
     st.success("Logged in as admin.")
+    admin_active_league = db.get_active_league()
+    admin_playoffs_started = bool(admin_active_league and db.playoffs_started(admin_active_league["id"]))
 
     st.markdown('<div class="section-title">Pending approvals</div>', unsafe_allow_html=True)
     pending = db.list_players(status="pending")
@@ -532,7 +690,7 @@ elif page_key == "admin":
         if active != p["active"]:
             db.update_player(p["id"], p["club_name"], p["ign"], active)
             st.rerun()
-        if c4.button("Remove", key=f"rm_{p['id']}"):
+        if c4.button("Remove", key=f"rm_{p['id']}", disabled=admin_playoffs_started):
             try:
                 db.remove_player(p["id"])
                 st.rerun()
@@ -552,200 +710,141 @@ elif page_key == "admin":
                 st.error(str(e))
 
     st.markdown('<div class="section-title">League management</div>', unsafe_allow_html=True)
-    active_league = db.get_active_league()
+    active_league = admin_active_league
 
     if active_league:
         st.write(f"Active league: **{active_league['name']}**")
+        playoff_mode = db.playoffs_started(active_league["id"])
 
-        st.markdown('<p class="section-title" style="font-size: 1rem;">Leg 1 deadline</p>', unsafe_allow_html=True)
-        raw_deadline = active_league.get("deadline")
-        current_deadline_date = date.fromisoformat(raw_deadline) if raw_deadline else None
-        deadline_passed = leg_deadline_passed(active_league, 1)
-
-        if current_deadline_date:
-            if deadline_passed:
-                st.markdown(
-                    f'<p class="muted">⏰ Deadline was <b>{current_deadline_date.strftime("%d %b %Y")}, 12:00 PM</b> — passed. '
-                    f'Overdue Leg 1 fixtures can be forfeited below.</p>', unsafe_allow_html=True,
-                )
+        if not playoff_mode:
+            st.markdown('<p class="section-title" style="font-size: 1rem;">League deadlines</p>', unsafe_allow_html=True)
+            raw_deadline = active_league.get("deadline")
+            current_deadline_date = date.fromisoformat(raw_deadline) if raw_deadline else None
+            deadline_passed = leg_deadline_passed(active_league, 1)
+            if current_deadline_date:
+                label = "passed — overdue fixtures were auto-resolved" if deadline_passed else "upcoming"
+                st.markdown(f'<p class="muted">Leg 1 deadline: <b>{current_deadline_date.strftime("%d %b %Y")}, 12:00 PM</b> ({label}).</p>', unsafe_allow_html=True)
             else:
-                st.markdown(f'<p class="muted">Deadline: <b>{current_deadline_date.strftime("%d %b %Y")}, 12:00 PM</b></p>', unsafe_allow_html=True)
-        else:
-            st.markdown('<p class="muted">No Leg 1 deadline set — forfeits for Leg 1 are off until you set one.</p>', unsafe_allow_html=True)
+                st.markdown('<p class="muted">No Leg 1 deadline set.</p>', unsafe_allow_html=True)
 
-        new_deadline = st.date_input("Set / change Leg 1 deadline", value=current_deadline_date or date.today(), key="deadline_input")
-        dc1, dc2 = st.columns(2)
-        if dc1.button("Update Leg 1 deadline", use_container_width=True):
-            db.set_league_deadline(active_league["id"], new_deadline)
-            st.success("Leg 1 deadline updated.")
-            st.rerun()
-        if dc2.button("Clear Leg 1 deadline", use_container_width=True, disabled=not current_deadline_date):
-            db.set_league_deadline(active_league["id"], None)
-            st.success("Leg 1 deadline cleared.")
-            st.rerun()
+            new_deadline = st.date_input("Set / change Leg 1 deadline", value=current_deadline_date or date.today(), key="deadline_input")
+            dc1, dc2 = st.columns(2)
+            if dc1.button("Update Leg 1 deadline", use_container_width=True):
+                db.set_league_deadline(active_league["id"], new_deadline)
+                st.rerun()
+            if dc2.button("Clear Leg 1 deadline", use_container_width=True, disabled=not current_deadline_date):
+                db.set_league_deadline(active_league["id"], None)
+                st.rerun()
 
-        st.markdown('<p class="section-title" style="font-size: 1rem;">Leg 2 deadline</p>', unsafe_allow_html=True)
-        raw_leg2_deadline = active_league.get("leg2_deadline")
-        current_leg2_deadline_date = date.fromisoformat(raw_leg2_deadline) if raw_leg2_deadline else None
-        leg2_deadline_passed = leg_deadline_passed(active_league, 2)
-
-        if not active_league["leg2_unlocked"]:
-            st.markdown('<p class="muted">Leg 2 is still locked — you can set a deadline now, but it only makes sense once Leg 2 opens up.</p>', unsafe_allow_html=True)
-
-        if current_leg2_deadline_date:
-            if leg2_deadline_passed:
-                st.markdown(
-                    f'<p class="muted">⏰ Deadline was <b>{current_leg2_deadline_date.strftime("%d %b %Y")}, 12:00 PM</b> — passed. '
-                    f'Overdue Leg 2 fixtures can be forfeited below.</p>', unsafe_allow_html=True,
-                )
+            raw_leg2_deadline = active_league.get("leg2_deadline")
+            current_leg2_deadline_date = date.fromisoformat(raw_leg2_deadline) if raw_leg2_deadline else None
+            leg2_deadline_passed = leg_deadline_passed(active_league, 2)
+            if current_leg2_deadline_date:
+                label = "passed — overdue fixtures were auto-resolved" if leg2_deadline_passed else "upcoming"
+                st.markdown(f'<p class="muted">Leg 2 deadline: <b>{current_leg2_deadline_date.strftime("%d %b %Y")}, 12:00 PM</b> ({label}).</p>', unsafe_allow_html=True)
             else:
-                st.markdown(f'<p class="muted">Deadline: <b>{current_leg2_deadline_date.strftime("%d %b %Y")}, 12:00 PM</b></p>', unsafe_allow_html=True)
-        else:
-            st.markdown('<p class="muted">No Leg 2 deadline set — forfeits for Leg 2 are off until you set one.</p>', unsafe_allow_html=True)
+                st.markdown('<p class="muted">No Leg 2 deadline set.</p>', unsafe_allow_html=True)
 
-        new_leg2_deadline = st.date_input("Set / change Leg 2 deadline", value=current_leg2_deadline_date or date.today(), key="leg2_deadline_admin_input")
-        lc1, lc2 = st.columns(2)
-        if lc1.button("Update Leg 2 deadline", use_container_width=True):
-            db.set_league_leg2_deadline(active_league["id"], new_leg2_deadline)
-            st.success("Leg 2 deadline updated.")
-            st.rerun()
-        if lc2.button("Clear Leg 2 deadline", use_container_width=True, disabled=not current_leg2_deadline_date):
-            db.set_league_leg2_deadline(active_league["id"], None)
-            st.success("Leg 2 deadline cleared.")
-            st.rerun()
-
-        st.markdown('<p class="section-title" style="font-size: 1rem;">Leg 2 lock</p>', unsafe_allow_html=True)
-        if active_league["leg2_unlocked"]:
-            st.markdown('<p class="muted">🔓 Leg 2 is unlocked — reverse fixtures can be played.</p>', unsafe_allow_html=True)
-        else:
-            all_leg1_done = db.leg1_complete(active_league["id"])
-            fixtures_now = db.list_fixtures(active_league["id"])
-            leg1_total = sum(1 for f in fixtures_now if f["leg"] == 1)
-            leg1_played = sum(1 for f in fixtures_now if f["leg"] == 1 and f["played"])
-            st.markdown(f'<p class="muted">Leg 1 progress: {leg1_played}/{leg1_total} played</p>', unsafe_allow_html=True)
-            if st.button("🔓 Unlock Leg 2 matches", disabled=not all_leg1_done):
-                db.unlock_leg2(active_league["id"])
-                st.success("Leg 2 unlocked — reverse fixtures can now be played.")
+            new_leg2_deadline = st.date_input("Set / change Leg 2 deadline", value=current_leg2_deadline_date or date.today(), key="leg2_deadline_admin_input")
+            lc1, lc2 = st.columns(2)
+            if lc1.button("Update Leg 2 deadline", use_container_width=True):
+                db.set_league_leg2_deadline(active_league["id"], new_leg2_deadline)
                 st.rerun()
-            if not all_leg1_done:
-                st.markdown('<p class="muted">Unlocks automatically becomes available once every Leg 1 fixture is played.</p>', unsafe_allow_html=True)
-
-        if st.button("🏁 Complete this league (locks table, tags winner)", type="primary"):
-            try:
-                db.complete_league(active_league["id"])
-                st.success("League completed and archived.")
+            if lc2.button("Clear Leg 2 deadline", use_container_width=True, disabled=not current_leg2_deadline_date):
+                db.set_league_leg2_deadline(active_league["id"], None)
                 st.rerun()
-            except Exception as e:
-                st.error(str(e))
 
-        st.markdown('<p class="section-title" style="font-size: 1rem;">Add a player mid-season</p>', unsafe_allow_html=True)
-        st.markdown('<p class="muted">Slots them in with fresh home & away fixtures against everyone already in the league. Your existing results are untouched.</p>', unsafe_allow_html=True)
-        existing_ids = db.get_league_participant_ids(active_league["id"])
-        approved_active = [p for p in db.list_players(status="approved") if p["active"]]
-        joinable = [p for p in approved_active if p["id"] not in existing_ids]
-        if not joinable:
-            st.markdown('<p class="muted">No approved players left to add — everyone approved is already in this league.</p>', unsafe_allow_html=True)
-        else:
-            new_player_id = st.selectbox(
-                "Player to add", options=[p["id"] for p in joinable],
-                format_func=lambda pid: player_label(next(p for p in joinable if p["id"] == pid)),
-            )
-            if st.button("➕ Add to league"):
-                try:
-                    db.add_player_to_league(active_league["id"], new_player_id)
-                    st.success("Added — fixtures generated against the rest of the league.")
+            st.markdown('<p class="section-title" style="font-size: 1rem;">Leg 2 lock</p>', unsafe_allow_html=True)
+            if active_league["leg2_unlocked"]:
+                st.markdown('<p class="muted">🔓 Leg 2 is unlocked.</p>', unsafe_allow_html=True)
+            else:
+                all_leg1_done = db.leg1_complete(active_league["id"])
+                fixtures_now = [f for f in db.list_fixtures(active_league["id"]) if f["leg"] in (1, 2)]
+                leg1_total = sum(1 for f in fixtures_now if f["leg"] == 1)
+                leg1_played = sum(1 for f in fixtures_now if f["leg"] == 1 and f["played"])
+                st.markdown(f'<p class="muted">Leg 1 progress: {leg1_played}/{leg1_total} played</p>', unsafe_allow_html=True)
+                if st.button("🔓 Unlock Leg 2 matches", disabled=not all_leg1_done):
+                    db.unlock_leg2(active_league["id"])
                     st.rerun()
-                except Exception as e:
-                    st.error(str(e))
+                if not all_leg1_done:
+                    st.markdown('<p class="muted">Unlock becomes available once every Leg 1 fixture is played (including automatic deadline resolutions).</p>', unsafe_allow_html=True)
 
-        st.markdown('<p class="section-title" style="font-size: 1rem;">Forfeits</p>', unsafe_allow_html=True)
-        st.markdown('<p class="muted">Overdue matches now get auto-resolved (fewer matches played in that leg = the forfeit loss, equal counts = a 1-1 draw) the moment anyone loads the app after the deadline. This section is just a manual fallback / rarely needed.</p>', unsafe_allow_html=True)
-        if not deadline_passed and not leg2_deadline_passed:
-            st.markdown('<p class="muted">No deadline has passed yet — nothing to forfeit.</p>', unsafe_allow_html=True)
-        else:
-            all_fixtures = db.list_fixtures(active_league["id"])
-            overdue = [
-                f for f in all_fixtures if not f["played"] and (
-                    (f["leg"] == 1 and deadline_passed) or (f["leg"] == 2 and leg2_deadline_passed)
-                )
-            ]
-            if not overdue:
-                st.markdown('<p class="muted">No overdue unplayed fixtures right now.</p>', unsafe_allow_html=True)
-            else:
-                for f in overdue:
-                    with st.expander(f"⏰ {f['home_ign']} vs {f['away_ign']}  (Leg {f['leg']})"):
-                        outcome_choice = st.radio(
-                            "Outcome",
-                            options=["home", "draw", "away"],
-                            format_func=lambda w, f=f: (
-                                f"{f['home_ign']} ({f['home_club_name']}) wins 1-0" if w == "home"
-                                else "Draw 0-0 — no forfeit loser" if w == "draw"
-                                else f"{f['away_ign']} ({f['away_club_name']}) wins 1-0"
-                            ),
-                            key=f"forfeit_choice_{f['id']}",
-                        )
-                        if st.button("Apply result", key=f"forfeit_apply_{f['id']}"):
-                            db.apply_forfeit(f["id"], outcome_choice)
-                            st.success("Forfeit result applied.")
+            league_done = db.league_stage_complete(active_league["id"])
+            table_now = db.get_standings(active_league["id"])
+            st.markdown('<p class="section-title" style="font-size: 1rem;">Start playoffs</p>', unsafe_allow_html=True)
+            if league_done:
+                if len(table_now) >= 8:
+                    st.markdown('<p class="muted">League stage complete. The top 8 will be seeded into the knockout bracket: 1v8, 4v5, 2v7, 3v6.</p>', unsafe_allow_html=True)
+                    if st.button("🏆 Finish league stage & create Top 8 playoffs", type="primary", use_container_width=True):
+                        try:
+                            db.create_playoffs(active_league["id"])
+                            st.success("League stage locked — quarter-finals created.")
                             st.rerun()
+                        except Exception as e:
+                            st.error(str(e))
+                else:
+                    st.warning(f"League stage is complete, but only {len(table_now)} teams are in the table. Top-8 playoffs need at least 8 teams.")
+            else:
+                st.markdown('<p class="muted">Finish every league fixture first. Once all matches are done, the Top 8 playoff button will unlock.</p>', unsafe_allow_html=True)
+
+            st.markdown('<p class="section-title" style="font-size: 1rem;">Add a player mid-season</p>', unsafe_allow_html=True)
+            existing_ids = db.get_league_participant_ids(active_league["id"])
+            approved_active = [p for p in db.list_players(status="approved") if p["active"]]
+            joinable = [p for p in approved_active if p["id"] not in existing_ids]
+            if not joinable:
+                st.markdown('<p class="muted">No approved players left to add.</p>', unsafe_allow_html=True)
+            elif league_done:
+                st.markdown('<p class="muted">Player additions are locked once the league stage is complete.</p>', unsafe_allow_html=True)
+            else:
+                new_player_id = st.selectbox(
+                    "Player to add", options=[p["id"] for p in joinable],
+                    format_func=lambda pid: player_label(next(p for p in joinable if p["id"] == pid)),
+                )
+                if st.button("➕ Add to league"):
+                    try:
+                        db.add_player_to_league(active_league["id"], new_player_id)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(str(e))
+        else:
+            st.success("🏆 League stage complete — Top 8 playoffs are in progress. Knockout rounds advance automatically when each tie is finished.")
+            po = db.list_fixtures(active_league["id"])
+            final = next((f for f in po if f["leg"] == db.FINAL_LEG), None)
+            champion = db.playoff_champion(active_league["id"])
+            if champion:
+                players = {p["id"]: p for p in db.list_players()}
+                winner = players.get(champion)
+                winner_name = f"{winner['ign']} ({winner['club_name']})" if winner else "Champion"
+                st.success(f"🏆 {winner_name} has won the season!")
+                if st.button("🏁 Archive season", type="primary", use_container_width=True):
+                    try:
+                        db.complete_league(active_league["id"])
+                        st.rerun()
+                    except Exception as e:
+                        st.error(str(e))
+            elif final:
+                st.info("The final is ready on the Playoffs page. Enter a winner there; the season will then be ready to archive.")
+            else:
+                st.info("The knockout bracket is progressing automatically. Open the Playoffs page to enter scores.")
 
         st.markdown('<p class="section-title" style="font-size: 1rem;">Matches involving removed players</p>', unsafe_allow_html=True)
-        st.markdown('<p class="muted">When you remove a player, any match they already played is kept as real history — but it leaves their opponent with one extra match compared to everyone else. If that\'s throwing off comparisons, you can wipe that specific match here.</p>', unsafe_allow_html=True)
+        st.markdown('<p class="muted">Played matches are kept as history. If a removed player leaves an orphaned fixture, you can delete that individual match.</p>', unsafe_allow_html=True)
         orphaned = db.get_orphaned_fixtures(active_league["id"])
         if not orphaned:
             st.markdown('<p class="muted">None right now.</p>', unsafe_allow_html=True)
         else:
             for f in orphaned:
                 score = f"{f['home_score']}-{f['away_score']}" if f["played"] else "unplayed"
-                with st.expander(f"{f['home_ign']} vs {f['away_ign']} (Leg {f['leg']}) — {score}"):
-                    st.markdown('<p class="muted">One of these players has since been removed. Deleting this match removes it from the standings entirely (both sides), bringing match counts back in line.</p>', unsafe_allow_html=True)
+                with st.expander(f"{f['home_ign']} vs {f['away_ign']} — {score}"):
                     confirm_del = st.checkbox("Confirm delete — no undo", key=f"confirm_orphan_del_{f['id']}")
                     if st.button("🗑️ Delete this match", key=f"orphan_del_{f['id']}", disabled=not confirm_del):
                         db.delete_fixture(f["id"])
-                        st.success("Match deleted.")
                         st.rerun()
-                                # ---- Playoff management ----
-        st.markdown('<div class="section-title">Playoffs</div>', unsafe_allow_html=True)
-        playoff_fixtures = db.get_playoff_fixtures(active_league["id"])
-        if not playoff_fixtures:
-            if st.button("Generate Playoffs (top 8)", key="gen_playoffs"):
-                try:
-                    db.generate_playoffs(active_league["id"])
-                    st.success("Playoff fixtures generated!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(str(e))
-        else:
-            st.write("Playoffs have been generated.")
-            rounds = sorted(set(f["round"] for f in playoff_fixtures))
-            current_round = max(rounds)
-            round_fixtures = [f for f in playoff_fixtures if f["round"] == current_round]
-            all_played = all(f["played"] for f in round_fixtures)
-            if current_round < 3 and all_played:
-                if st.button(f"Advance to next round", key="advance_round"):
-                    try:
-                        db.advance_playoff_round(active_league["id"], current_round)
-                        st.success("Advanced to next round!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(str(e))
-            elif current_round == 3 and all_played:
-                winner_id = db.get_playoff_winner(active_league["id"])
-                if winner_id:
-                    winner = db.get_player(winner_id)
-                    st.success(f"🏆 Playoff winner: {winner['ign']} ({winner['club_name']})")
-                else:
-                    st.warning("Final played but no winner determined (draw). Please set winner manually.")
 
-        st.markdown('<p class="section-title" style="font-size: 1rem;">Edit closed fixtures</p>', unsafe_allow_html=True)
-        st.markdown('<p class="muted">Once a leg\'s deadline passes, players can no longer tick or undo results for it — use this to correct a score (e.g. an auto-resolved forfeit that should\'ve been a real result).</p>', unsafe_allow_html=True)
-        st.button("✏️ Open Edit Closed Fixtures", on_click=go_to, args=("edit_closed",))
-
-        st.markdown('<p class="muted">Made a mistake starting this one (wrong players, test league, etc)? Cancel it below instead of completing it — this deletes it with no archive.</p>', unsafe_allow_html=True)
-        cancel_confirm = st.checkbox("Confirm cancel — this deletes the league and its fixtures, no undo", key="cancel_active_confirm")
+        st.markdown('<p class="muted">Made a mistake starting this one? Cancel it below instead of archiving it — this deletes the league and all its fixtures with no undo.</p>', unsafe_allow_html=True)
+        cancel_confirm = st.checkbox("Confirm cancel — delete this league", key="cancel_active_confirm")
         if st.button("🗑️ Cancel & delete this league", disabled=not cancel_confirm):
             db.delete_league(active_league["id"])
-            st.success("League cancelled and deleted.")
             st.rerun()
     else:
         st.write("No active league. Start one from approved, active players:")
@@ -756,7 +855,7 @@ elif page_key == "admin":
         )
         league_name = st.text_input("League name", value="Season 1")
 
-        set_deadline = st.checkbox("Set a Leg 1 deadline (missed matches can be forfeited)")
+        set_deadline = st.checkbox("Set a Leg 1 deadline (missed matches auto-resolve)")
         deadline_val = None
         if set_deadline:
             deadline_val = st.date_input("Leg 1 deadline date", min_value=date.today(), key="leg1_deadline_input")
@@ -766,7 +865,6 @@ elif page_key == "admin":
         if set_leg2_deadline:
             leg2_min = deadline_val if deadline_val else date.today()
             leg2_deadline_val = st.date_input("Leg 2 deadline date", min_value=leg2_min, key="leg2_deadline_input")
-            st.markdown('<p class="muted">You can always set or adjust this later once Leg 2 actually unlocks.</p>', unsafe_allow_html=True)
 
         if st.button("🚀 Start league", type="primary"):
             if len(chosen) < 2:
@@ -774,10 +872,11 @@ elif page_key == "admin":
             else:
                 try:
                     db.start_new_league(league_name, chosen, deadline=deadline_val, leg2_deadline=leg2_deadline_val)
-                    st.success("League started — fixtures generated.")
                     st.rerun()
                 except Exception as e:
                     st.error(str(e))
+
+
 
     st.markdown('<div class="section-title">Delete league history</div>', unsafe_allow_html=True)
     st.markdown('<p class="muted">Permanently deletes a completed league and its fixtures — no undo.</p>', unsafe_allow_html=True)
@@ -791,48 +890,4 @@ elif page_key == "admin":
             confirm = c2.checkbox("Confirm delete", key=f"confirm_del_{lg['id']}")
             if c3.button("🗑️ Delete", key=f"del_league_{lg['id']}", disabled=not confirm):
                 db.delete_league(lg["id"])
-                st.success(f"Deleted {lg['name']}.")
                 st.rerun()
-
-
-# ----------------------------------------------------- Edit Closed Fixtures --
-elif page_key == "edit_closed":
-    pw = st.text_input("Admin password", type="password", key="edit_closed_pw")
-    if pw != st.secrets.get("ADMIN_PASSWORD", ""):
-        st.warning("Enter the admin password to continue.")
-        st.stop()
-
-    active_league = db.get_active_league()
-
-    if not active_league:
-        st.markdown('<div class="section-title">No ongoing League</div>', unsafe_allow_html=True)
-    else:
-        st.markdown(f'<div class="section-title">{active_league["name"]}</div>', unsafe_allow_html=True)
-
-        leg_choice = st.radio("Leg", options=[1, 2], format_func=lambda l: f"Leg {l}", horizontal=True)
-        leg_closed_now = leg_deadline_passed(active_league, leg_choice)
-        if leg_closed_now:
-            st.markdown('<p class="muted">🔒 This leg is closed — you can still correct results below.</p>', unsafe_allow_html=True)
-        else:
-            st.markdown('<p class="muted">This leg is still open — players can edit their own results normally, but you can override here too if needed.</p>', unsafe_allow_html=True)
-
-        leg_fixtures = [f for f in db.list_fixtures(active_league["id"]) if f["leg"] == leg_choice]
-        if not leg_fixtures:
-            st.markdown('<p class="muted">No fixtures found for this leg.</p>', unsafe_allow_html=True)
-        else:
-            for f in leg_fixtures:
-                tag = " · 🚩 forfeit" if f.get("forfeit") else ""
-                score = f"{f['home_score']}-{f['away_score']}" if f["played"] else "unplayed"
-                with st.expander(f"{f['home_ign']} vs {f['away_ign']}{tag} — {score}"):
-                    ec1, ec2, ec3 = st.columns([1, 1, 1.4])
-                    new_hs = ec1.number_input("Home", min_value=0, max_value=20, value=f["home_score"] or 0, key=f"edit_hs_{f['id']}")
-                    new_aws = ec2.number_input("Away", min_value=0, max_value=20, value=f["away_score"] or 0, key=f"edit_as_{f['id']}")
-                    ec3.markdown("<div style='height: 1.6rem'></div>", unsafe_allow_html=True)
-                    if ec3.button("Save correction", key=f"edit_save_{f['id']}", use_container_width=True):
-                        db.submit_result(f["id"], int(new_hs), int(new_aws))
-                        st.success("Result corrected.")
-                        st.rerun()
-                    if f["played"] and st.button("Revert to unplayed", key=f"edit_revert_{f['id']}"):
-                        db.unmark_result(f["id"])
-                        st.success("Reverted — fixture is unplayed again.")
-                        st.rerun()
