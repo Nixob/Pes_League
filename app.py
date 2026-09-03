@@ -170,7 +170,7 @@ table.league-table tr.playoff-row td:first-child {
 }
 .tie-meta { color: var(--muted); font-size: 0.8rem; }
 
-/* --- BRACKET (simplified grid) --- */
+/* --- BRACKET (5-column grid, your layout) --- */
 .bracket-wrap {
     width: 100%;
     overflow-x: auto;
@@ -179,10 +179,10 @@ table.league-table tr.playoff-row td:first-child {
 }
 .bracket-board {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
     grid-template-rows: auto auto auto;
-    gap: 16px 8px;
-    min-width: 700px;
+    gap: 20px 8px;
+    min-width: 640px;
     padding: 0.5rem;
     justify-items: center;
     align-items: center;
@@ -250,7 +250,64 @@ table.league-table tr.playoff-row td:first-child {
 }
 .bracket-pending { opacity: 0.6; }
 
-/* arrows between columns */
+/* connectors – simple lines (no arrows) using pseudo-elements */
+.bracket-connector {
+    position: relative;
+}
+.bracket-connector::after {
+    content: '';
+    position: absolute;
+    background: var(--line);
+}
+
+/* horizontal lines from QF1 to SF1 (row1 col1 to row2 col2) */
+.qf1-to-sf1::after {
+    right: -16px;
+    top: 50%;
+    width: 16px;
+    height: 2px;
+}
+/* horizontal from SF1 to Final */
+.sf1-to-final::after {
+    right: -16px;
+    top: 50%;
+    width: 16px;
+    height: 2px;
+}
+/* horizontal from Final to SF2 */
+.final-to-sf2::after {
+    right: -16px;
+    top: 50%;
+    width: 16px;
+    height: 2px;
+}
+/* horizontal from SF2 to QF3/QF4 */
+.sf2-to-qf3::after {
+    right: -16px;
+    top: 50%;
+    width: 16px;
+    height: 2px;
+}
+
+/* vertical lines from QF1 and QF2 to meet the horizontal before SF1 */
+.qf1-to-sf1-vertical::after {
+    right: -16px;
+    top: 50%;
+    width: 2px;
+    height: 80px;  /* spans both QF rows */
+}
+
+/* Similar for right side */
+.qf3-to-sf2-vertical::before {
+    left: -16px;
+    top: 50%;
+    width: 2px;
+    height: 80px;
+}
+
+/* but we'll use a different approach: we can put connectors in separate cells, but easier: just use a container that spans rows and use borders */
+
+/* I'll simplify: we'll rely on the grid positions and not draw complex lines, just horizontal arrows (optional) */
 .bracket-arrow {
     position: relative;
 }
@@ -261,7 +318,7 @@ table.league-table tr.playoff-row td:first-child {
     top: 50%;
     transform: translateY(-50%);
     color: var(--accent);
-    font-size: 0.8rem;
+    font-size: 0.7rem;
 }
 .bracket-arrow-left::before {
     content: '◀';
@@ -270,10 +327,9 @@ table.league-table tr.playoff-row td:first-child {
     top: 50%;
     transform: translateY(-50%);
     color: var(--accent);
-    font-size: 0.8rem;
+    font-size: 0.7rem;
 }
 
-/* mobile */
 @media (max-width: 640px) {
     .block-container { padding-left: 0.6rem; padding-right: 0.6rem; }
     .brand-bar { font-size: 1.25rem; }
@@ -284,8 +340,8 @@ table.league-table tr.playoff-row td:first-child {
     .club-sub { font-size: 0.78em; }
 
     .bracket-board {
-        min-width: 560px;
-        gap: 10px 4px;
+        min-width: 520px;
+        gap: 12px 4px;
         padding: 0.2rem;
     }
     .bracket-match { padding: 0.3rem 0.4rem; }
@@ -733,21 +789,28 @@ elif page_key == "playoffs":
             else:
                 final_html = '<div class="bracket-match final bracket-pending"><div class="bracket-round">🏆 FINAL</div><div class="bracket-team"><span>Winner SF1</span></div><div class="bracket-team"><span>Winner SF2</span></div><div class="bracket-final-score">FINAL AWAITS</div></div>'
 
+            # Build the 5-column grid with explicit row/column placement
+            # We'll use a 5-column grid with 3 rows: row1 top, row2 middle, row3 bottom
+            # col1: QF1 (row1), QF2 (row3)
+            # col2: SF1 (row2)
+            # col3: Final (row2)
+            # col4: SF2 (row2)
+            # col5: QF3 (row1), QF4 (row3)
+            # We'll put each match in a div with grid-column and grid-row styles
+
             visual = f'''
             <div class="bracket-wrap">
-                <div class="bracket-board">
-                    <!-- left QFs -->
-                    <div class="bracket-arrow">{match_html(left_qf1, 'QF 1')}</div>
-                    <div class="bracket-arrow">{match_html(left_qf2, 'QF 2')}</div>
-                    <!-- SF1 -->
-                    <div class="bracket-arrow">{sf1_html}</div>
-                    <!-- Final -->
-                    <div>{final_html}</div>
-                    <!-- SF2 -->
-                    <div class="bracket-arrow-left">{sf2_html}</div>
-                    <!-- right QFs -->
-                    <div>{match_html(right_qf1, 'QF 3')}</div>
-                    <div>{match_html(right_qf2, 'QF 4')}</div>
+                <div class="bracket-board" style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr 1fr; grid-template-rows:auto auto auto; gap:20px 8px; min-width:640px; padding:0.5rem; justify-items:center; align-items:center;">
+                    <!-- Row 1: QF1 (col1), QF3 (col5) -->
+                    <div style="grid-column:1; grid-row:1; width:100%;" class="bracket-arrow">{match_html(left_qf1, 'QF 1')}</div>
+                    <div style="grid-column:5; grid-row:1; width:100%;" class="bracket-arrow-left">{match_html(right_qf1, 'QF 3')}</div>
+                    <!-- Row 2: SF1 (col2), Final (col3), SF2 (col4) -->
+                    <div style="grid-column:2; grid-row:2; width:100%;" class="bracket-arrow">{sf1_html}</div>
+                    <div style="grid-column:3; grid-row:2; width:100%;">{final_html}</div>
+                    <div style="grid-column:4; grid-row:2; width:100%;" class="bracket-arrow-left">{sf2_html}</div>
+                    <!-- Row 3: QF2 (col1), QF4 (col5) -->
+                    <div style="grid-column:1; grid-row:3; width:100%;" class="bracket-arrow">{match_html(left_qf2, 'QF 2')}</div>
+                    <div style="grid-column:5; grid-row:3; width:100%;" class="bracket-arrow-left">{match_html(right_qf2, 'QF 4')}</div>
                 </div>
             </div>
             '''
