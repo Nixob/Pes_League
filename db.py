@@ -187,7 +187,7 @@ def apply_forfeit(fixture_id: str, outcome: str):
     played match."""
     if outcome not in ("home", "away", "draw"):
         raise ValueError("outcome must be 'home', 'away', or 'draw'")
-    scores = {"home": (1, 0), "away": (0, 1), "draw": (1, 1)}
+    scores = {"home": (1, 0), "away": (0, 1), "draw": (0, 0)}
     home_score, away_score = scores[outcome]
     sb = get_client()
     sb.table("fixtures").update({
@@ -201,11 +201,12 @@ def apply_forfeit(fixture_id: str, outcome: str):
 
 def auto_resolve_leg(league_id: str, leg: int) -> int:
     """Scans every still-unplayed fixture in the given leg and resolves
-    it automatically: whichever side has played FEWER matches in this
-    leg so far gets a 1-0 forfeit loss (they're the more likely no-show).
-    Equal counts become a 1-1 forfeit draw, since there's no fair way to
-    pick a loser. Safe to call repeatedly — once nothing's unplayed for
-    that leg, it's a no-op. Returns how many fixtures got resolved."""
+    it automatically: whichever side has played MORE matches in this
+    leg so far gets credited a 1-0 forfeit win (the other side is the
+    more likely no-show). Equal counts become a 0-0 forfeit draw, since
+    there's no fair way to pick a winner. Safe to call repeatedly —
+    once nothing's unplayed for that leg, it's a no-op. Returns how
+    many fixtures got resolved."""
     fixtures = list_fixtures(league_id)
     leg_fixtures = [f for f in fixtures if f["leg"] == leg]
 
@@ -221,10 +222,10 @@ def auto_resolve_leg(league_id: str, leg: int) -> int:
         ac = played_count.get(f["away_player_id"], 0)
         if hc == ac:
             apply_forfeit(f["id"], "draw")
-        elif hc < ac:
-            apply_forfeit(f["id"], "away")   # home played fewer matches -> home loses
+        elif hc > ac:
+            apply_forfeit(f["id"], "home")   # home played more matches -> home wins
         else:
-            apply_forfeit(f["id"], "home")   # away played fewer matches -> away loses
+            apply_forfeit(f["id"], "away")   # away played more matches -> away wins
     return len(unplayed)
 
 
