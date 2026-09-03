@@ -170,189 +170,42 @@ table.league-table tr.playoff-row td:first-child {
 }
 .tie-meta { color: var(--muted); font-size: 0.8rem; }
 
-/* --- BRACKET (updated) --- */
+/* --- BRACKET (simplified grid) --- */
 .bracket-wrap {
     width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-    padding: 1rem 0 1.5rem;
-    background: linear-gradient(180deg, rgba(184,60,240,0.04) 0%, transparent 100%);
-    border-radius: 16px;
+    padding: 1rem 0;
 }
 .bracket-board {
-    min-width: 760px;
     display: grid;
-    grid-template-columns: minmax(130px,1fr) 120px 130px 120px minmax(130px,1fr);
-    grid-template-rows: repeat(7, 48px);
+    grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 16px 8px;
+    min-width: 700px;
+    padding: 0.5rem;
+    justify-items: center;
     align-items: center;
-    position: relative;
-    padding: 0.5rem 0.2rem;
-    gap: 2px;
-}
-.bracket-col {
-    position: relative;
-    height: 100%;
-}
-.bracket-col.left { grid-column:1; grid-row:1/-1; }
-.bracket-col.left-sf { grid-column:2; grid-row:1/-1; display:flex; align-items:center; justify-content:center; }
-.bracket-col.final { grid-column:3; grid-row:1/-1; display:flex; align-items:center; justify-content:center; }
-.bracket-col.right-sf { grid-column:4; grid-row:1/-1; display:flex; align-items:center; justify-content:center; }
-.bracket-col.right { grid-column:5; grid-row:1/-1; }
-
-.bracket-side-label {
-    position: absolute;
-    top: -0.2rem;
-    width: 100%;
-    text-align: center;
-    color: var(--accent);
-    font-family: 'Poppins', sans-serif;
-    font-weight: 600;
-    font-size: 0.7rem;
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-    opacity: 0.8;
 }
 .bracket-match {
-    position: absolute;
-    width: 160px;
+    width: 100%;
     background: var(--card);
-    border: 1.5px solid var(--line);
+    border: 1px solid var(--line);
     border-radius: 10px;
-    padding: 0.4rem 0.6rem;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    transition: all 0.15s ease;
-    box-sizing: border-box;
+    padding: 0.5rem 0.7rem;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    transition: 0.2s;
+    text-align: center;
 }
 .bracket-match:hover {
     border-color: var(--accent);
     transform: scale(1.02);
 }
-.bracket-match.left-match { right: 0; }
-.bracket-match.right-match { left: 0; }
-.bracket-match.qf1 { top: 48px; }
-.bracket-match.qf2 { top: 192px; }
-
-.bracket-match::before,
-.bracket-match::after {
-    content: '';
-    position: absolute;
-    border-color: var(--accent);
-    border-style: solid;
-    border-width: 2px;
+.bracket-match.final {
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 20px rgba(184,60,240,0.25);
+    background: rgba(184,60,240,0.06);
 }
-.left .qf1::after, .left .qf2::after {
-    right: -40px;
-    width: 40px;
-    height: 96px;
-    top: 50%;
-    border-width: 0 2px 2px 0;
-}
-.right .qf1::before, .right .qf2::before {
-    left: -40px;
-    width: 40px;
-    height: 96px;
-    top: 50%;
-    border-width: 0 0 2px 2px;
-}
-.left-sf .sf::before {
-    left: -40px;
-    width: 40px;
-    height: 0;
-    top: 50%;
-    border-width: 2px 0 0;
-}
-.right-sf .sf::after {
-    right: -40px;
-    width: 40px;
-    height: 0;
-    top: 50%;
-    border-width: 2px 0 0;
-}
-.left-sf .sf::after {
-    right: -40px;
-    width: 40px;
-    height: 96px;
-    top: 50%;
-    border-width: 0 2px 2px 0;
-}
-.right-sf .sf::before {
-    left: -40px;
-    width: 40px;
-    height: 96px;
-    top: 50%;
-    border-width: 0 0 2px 2px;
-}
-.left-sf .sf { transform: translateY(24px); }
-.right-sf .sf { transform: translateY(24px); }
-.bracket-match.final::before {
-    left: -40px;
-    width: 40px;
-    top: 50%;
-    border-width: 2px 0 0;
-}
-.bracket-match.final::after {
-    right: -40px;
-    width: 40px;
-    top: 50%;
-    border-width: 2px 0 0;
-}
-
-/* arrowheads */
-.left .qf1::after, .left .qf2::after {
-    content: '▶';
-    right: -22px;
-    top: 50%;
-    transform: translateY(-50%) scale(0.8);
-    color: var(--accent);
-    border: none;
-    font-size: 0.9rem;
-}
-.right .qf1::before, .right .qf2::before {
-    content: '◀';
-    left: -22px;
-    top: 50%;
-    transform: translateY(-50%) scale(0.8);
-    color: var(--accent);
-    border: none;
-    font-size: 0.9rem;
-}
-.left-sf .sf::after {
-    content: '▶';
-    right: -22px;
-    top: 50%;
-    transform: translateY(-50%) scale(0.8);
-    color: var(--accent);
-    border: none;
-    font-size: 0.9rem;
-}
-.right-sf .sf::before {
-    content: '◀';
-    left: -22px;
-    top: 50%;
-    transform: translateY(-50%) scale(0.8);
-    color: var(--accent);
-    border: none;
-    font-size: 0.9rem;
-}
-.bracket-match.final::before {
-    content: '▶';
-    left: -22px;
-    top: 50%;
-    transform: translateY(-50%) scale(0.8);
-    color: var(--accent);
-    border: none;
-    font-size: 0.9rem;
-}
-.bracket-match.final::after {
-    content: '◀';
-    right: -22px;
-    top: 50%;
-    transform: translateY(-50%) scale(0.8);
-    color: var(--accent);
-    border: none;
-    font-size: 0.9rem;
-}
-
 .bracket-round {
     color: var(--accent);
     font-family: 'Poppins', sans-serif;
@@ -360,14 +213,14 @@ table.league-table tr.playoff-row td:first-child {
     font-size: 0.6rem;
     text-transform: uppercase;
     letter-spacing: 0.3px;
-    margin-bottom: 0.15rem;
+    margin-bottom: 0.2rem;
 }
 .bracket-team {
     display: flex;
     justify-content: space-between;
     gap: 0.3rem;
     padding: 0.1rem 0;
-    font-size: 0.72rem;
+    font-size: 0.75rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -392,18 +245,35 @@ table.league-table tr.playoff-row td:first-child {
 .bracket-final-score {
     margin-top: 0.3rem;
     font-weight: 700;
-    font-size: 0.72rem;
+    font-size: 0.75rem;
     color: #facc15;
 }
-.bracket-pending {
-    opacity: 0.6;
+.bracket-pending { opacity: 0.6; }
+
+/* arrows between columns */
+.bracket-arrow {
+    position: relative;
 }
-.bracket-match.final {
-    border: 2px solid var(--accent);
-    box-shadow: 0 0 20px rgba(184,60,240,0.3);
-    background: rgba(184,60,240,0.06);
+.bracket-arrow::after {
+    content: '▶';
+    position: absolute;
+    right: -12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent);
+    font-size: 0.8rem;
+}
+.bracket-arrow-left::before {
+    content: '◀';
+    position: absolute;
+    left: -12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent);
+    font-size: 0.8rem;
 }
 
+/* mobile */
 @media (max-width: 640px) {
     .block-container { padding-left: 0.6rem; padding-right: 0.6rem; }
     .brand-bar { font-size: 1.25rem; }
@@ -413,45 +283,17 @@ table.league-table tr.playoff-row td:first-child {
     table.league-table th, table.league-table td { padding: 4px 5px; }
     .club-sub { font-size: 0.78em; }
 
-    .bracket-wrap { margin-left:-0.2rem; margin-right:-0.2rem; padding-left:.15rem; padding-right:.15rem; }
     .bracket-board {
-        min-width: 540px;
-        grid-template-columns: 100px 90px 100px 90px 100px;
-        grid-template-rows: repeat(7, 40px);
+        min-width: 560px;
+        gap: 10px 4px;
+        padding: 0.2rem;
     }
-    .bracket-match {
-        width: 100px;
-        padding: 0.25rem 0.4rem;
-        border-radius: 8px;
-    }
-    .bracket-match.qf1 { top: 40px; }
-    .bracket-match.qf2 { top: 160px; }
-    .bracket-match.sf { width: 90px; }
-    .bracket-match.final { width: 100px; }
+    .bracket-match { padding: 0.3rem 0.4rem; }
     .bracket-team { font-size: 0.6rem; }
     .bracket-round { font-size: 0.5rem; }
     .bracket-agg-mini { font-size: 0.48rem; }
-    .bracket-side-label { font-size: 0.55rem; }
     .bracket-final-score { font-size: 0.6rem; }
-    .left .qf1::after, .left .qf2::after,
-    .right .qf1::before, .right .qf2::before,
-    .left-sf .sf::after, .right-sf .sf::before,
-    .bracket-match.final::before, .bracket-match.final::after {
-        font-size: 0.7rem;
-        right: -18px;
-        left: -18px;
-    }
-    .left .qf1::after, .left .qf2::after,
-    .right .qf1::before, .right .qf2::before,
-    .left-sf .sf::after, .right-sf .sf::before {
-        height: 80px;
-        width: 30px;
-        right: -30px;
-        left: -30px;
-    }
-    /* fixture cards: give inputs/buttons breathing room */
-    div[data-testid="stNumberInput"] input { padding: 6px 8px; font-size: 0.9rem; }
-    div[data-testid="stVerticalBlockBorderWrapper"] { padding: 0.6rem !important; }
+    .bracket-arrow::after, .bracket-arrow-left::before { font-size: 0.6rem; right: -8px; left: -8px; }
 }
 
 /* --- section headings --- */
@@ -839,49 +681,77 @@ elif page_key == "playoffs":
             for i,tie in enumerate(qf_groups,1):
                 n1,n2,agg,winner,reason=tie_label(tie,db.QF_LEG1,db.QF_LEG2)
                 qf_cards.append((i,n1,n2,agg,winner))
-            left_qfs=qf_cards[:2]; right_qfs=qf_cards[2:4]
-            left_sf=sf_groups[0] if len(sf_groups)>0 else None
-            right_sf=sf_groups[1] if len(sf_groups)>1 else None
+            # Build bracket grid items
+            left_qf1 = qf_cards[0] if len(qf_cards) > 0 else None
+            left_qf2 = qf_cards[1] if len(qf_cards) > 1 else None
+            right_qf1 = qf_cards[2] if len(qf_cards) > 2 else None
+            right_qf2 = qf_cards[3] if len(qf_cards) > 3 else None
 
-            def match_card(item,side):
-                i,n1,n2,agg,winner=item; tie=qf_groups[i-1]
-                winner_name=None
-                if winner: winner_name=tie[0]["home_ign"] if winner==tie[0]["home_player_id"] else tie[0]["away_ign"]
-                w1=' winner' if winner_name==n1 else ''; w2=' winner' if winner_name==n2 else ''
-                cls=('left-match ' if side=='left' else 'right-match ')+('qf1' if i in (1,3) else 'qf2')
-                return (f'<div class="bracket-match {cls}"><div class="bracket-round">QF {i}</div>'
-                        f'<div class="bracket-team{w1}"><span>{n1}</span></div>'
-                        f'<div class="bracket-team{w2}"><span>{n2}</span></div>'
-                        f'<div class="bracket-agg-mini">Agg {agg}</div></div>')
+            # SF and final info
+            sf1 = sf_groups[0] if len(sf_groups) > 0 else None
+            sf2 = sf_groups[1] if len(sf_groups) > 1 else None
+            final_match = final[0] if final else None
 
-            def sf_html(tie,title,q1,q2):
-                if not tie:
-                    return (f'<div class="bracket-match sf bracket-pending"><div class="bracket-round">{title}</div>'
-                            f'<div class="bracket-team"><span>Winner QF {q1}</span></div><div class="bracket-team"><span>Winner QF {q2}</span></div>'
-                            f'<div class="bracket-agg-mini">Awaiting QFs</div></div>')
-                n1,n2,agg,winner,reason=tie_label(tie,db.SF_LEG1,db.SF_LEG2)
-                w1=' winner' if winner and winner==tie[0]["home_player_id"] else ''; w2=' winner' if winner and winner==tie[0]["away_player_id"] else ''
-                return (f'<div class="bracket-match sf"><div class="bracket-round">{title}</div>'
-                        f'<div class="bracket-team{w1}"><span>{n1}</span></div><div class="bracket-team{w2}"><span>{n2}</span></div>'
-                        f'<div class="bracket-agg-mini">Agg {agg}</div></div>')
+            def match_html(card, round_label, winner_class=''):
+                if not card:
+                    return f'<div class="bracket-match bracket-pending"><div class="bracket-round">{round_label}</div><div class="bracket-team"><span>—</span></div><div class="bracket-team"><span>—</span></div></div>'
+                i, n1, n2, agg, winner = card
+                w1 = ' winner' if winner and winner == n1 else ''
+                w2 = ' winner' if winner and winner == n2 else ''
+                return f'''<div class="bracket-match {winner_class}">
+                    <div class="bracket-round">{round_label}</div>
+                    <div class="bracket-team{w1}"><span>{n1}</span></div>
+                    <div class="bracket-team{w2}"><span>{n2}</span></div>
+                    <div class="bracket-agg-mini">Agg {agg}</div>
+                </div>'''
 
-            if final:
-                ff=final[0]; final_left,final_right=ff["home_ign"],ff["away_ign"]
-                final_score=f'{ff["home_score"]} – {ff["away_score"]}' if ff["played"] else 'FINAL AWAITS'
-            else: final_left,final_right,final_score='Winner SF 1','Winner SF 2','FINAL AWAITS'
+            # Build SF cards
+            if sf1:
+                n1,n2,agg,winner,reason = tie_label(sf1, db.SF_LEG1, db.SF_LEG2)
+                sf1_html = f'''<div class="bracket-match"><div class="bracket-round">SF 1</div>
+                    <div class="bracket-team{' winner' if winner and winner==sf1[0]['home_player_id'] else ''}"><span>{n1}</span></div>
+                    <div class="bracket-team{' winner' if winner and winner==sf1[0]['away_player_id'] else ''}"><span>{n2}</span></div>
+                    <div class="bracket-agg-mini">Agg {agg}</div></div>'''
+            else:
+                sf1_html = '<div class="bracket-match bracket-pending"><div class="bracket-round">SF 1</div><div class="bracket-team"><span>Winner QF1</span></div><div class="bracket-team"><span>Winner QF2</span></div></div>'
 
-            visual=f'''<div class="bracket-wrap"><div class="bracket-board">
-                <div class="bracket-col left"><div class="bracket-side-label">QF · PATH A</div>
-                    {match_card(left_qfs[0],'left') if len(left_qfs)>0 else ''}{match_card(left_qfs[1],'left') if len(left_qfs)>1 else ''}</div>
-                <div class="bracket-col left-sf">{sf_html(left_sf,'SF 1',1,2)}</div>
-                <div class="bracket-col final"><div class="bracket-match final"><div class="bracket-round">🏆 FINAL · ONE MATCH</div>
-                    <div class="bracket-team"><span>{final_left}</span></div><div class="bracket-team"><span>{final_right}</span></div>
-                    <div class="bracket-final-score">{final_score}</div></div></div>
-                <div class="bracket-col right-sf">{sf_html(right_sf,'SF 2',3,4)}</div>
-                <div class="bracket-col right"><div class="bracket-side-label">PATH B · QF</div>
-                    {match_card(right_qfs[0],'right') if len(right_qfs)>0 else ''}{match_card(right_qfs[1],'right') if len(right_qfs)>1 else ''}</div>
-            </div></div>'''
-            st.markdown(visual,unsafe_allow_html=True)
+            if sf2:
+                n1,n2,agg,winner,reason = tie_label(sf2, db.SF_LEG1, db.SF_LEG2)
+                sf2_html = f'''<div class="bracket-match"><div class="bracket-round">SF 2</div>
+                    <div class="bracket-team{' winner' if winner and winner==sf2[0]['home_player_id'] else ''}"><span>{n1}</span></div>
+                    <div class="bracket-team{' winner' if winner and winner==sf2[0]['away_player_id'] else ''}"><span>{n2}</span></div>
+                    <div class="bracket-agg-mini">Agg {agg}</div></div>'''
+            else:
+                sf2_html = '<div class="bracket-match bracket-pending"><div class="bracket-round">SF 2</div><div class="bracket-team"><span>Winner QF3</span></div><div class="bracket-team"><span>Winner QF4</span></div></div>'
+
+            # Final
+            if final_match:
+                final_html = f'''<div class="bracket-match final"><div class="bracket-round">🏆 FINAL</div>
+                    <div class="bracket-team"><span>{final_match['home_ign']}</span></div>
+                    <div class="bracket-team"><span>{final_match['away_ign']}</span></div>
+                    <div class="bracket-final-score">{final_match['home_score']} – {final_match['away_score']}</div></div>'''
+            else:
+                final_html = '<div class="bracket-match final bracket-pending"><div class="bracket-round">🏆 FINAL</div><div class="bracket-team"><span>Winner SF1</span></div><div class="bracket-team"><span>Winner SF2</span></div><div class="bracket-final-score">FINAL AWAITS</div></div>'
+
+            visual = f'''
+            <div class="bracket-wrap">
+                <div class="bracket-board">
+                    <!-- left QFs -->
+                    <div class="bracket-arrow">{match_html(left_qf1, 'QF 1')}</div>
+                    <div class="bracket-arrow">{match_html(left_qf2, 'QF 2')}</div>
+                    <!-- SF1 -->
+                    <div class="bracket-arrow">{sf1_html}</div>
+                    <!-- Final -->
+                    <div>{final_html}</div>
+                    <!-- SF2 -->
+                    <div class="bracket-arrow-left">{sf2_html}</div>
+                    <!-- right QFs -->
+                    <div>{match_html(right_qf1, 'QF 3')}</div>
+                    <div>{match_html(right_qf2, 'QF 4')}</div>
+                </div>
+            </div>
+            '''
+            st.markdown(visual, unsafe_allow_html=True)
 
             st.markdown('<div class="knockout-title">Match results</div>', unsafe_allow_html=True)
 
