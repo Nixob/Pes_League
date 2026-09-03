@@ -351,7 +351,268 @@ def unmark_result(fixture_id: str):
     }).eq("id", fixture_id).execute()
 
 
+
+# ----------------------------------------------------------------- playoffs --
+
+def generate_playoffs(league_id: str):
+    """Generate QF fixtures for the top 8 players from the league standings.
+    Deletes any existing playoff fixtures for this league first.
+    Raises ValueError if fewer than 8 players."""
+    sb = get_client()
+    # Delete existing playoff fixtures for this league
+    sb.table("playoff_fixtures").delete().eq("league_id", league_id).execute()
+
+    standings = get_standings(league_id)
+    if len(standings) < 8:
+        raise ValueError("Need at least 8 players to generate playoffs.")
+
+    # Top 8 sorted by points, GD, GF (already sorted from get_standings)
+    top8 = standings[:8]
+    # Seed: 1 vs 8, 2 vs 7, 3 vs 6, 4 vs 5
+    pairings = [(0, 7), (1, 6), (2, 5), (3, 4)]
+    fixtures = []
+    for idx, (a, b) in enumerate(pairings, start=1):
+        home = top8[a]
+        away = top8[b]
+        # Leg 1
+        fixtures.append({
+            "league_id": league_id,
+            "round": 1,
+            "match_index": idx,
+            "home_player_id": home["player_id"],
+            "away_player_id": away["player_id"],
+            "home_club_name": home["club_name"],
+            "home_ign": home["ign"],
+            "away_club_name": away["club_name"],
+            "away_ign": away["ign"],
+            "leg": 1,
+        })
+        # Leg 2 (swap home/away)
+        fixtures.append({
+            "league_id": league_id,
+            "round": 1,
+            "match_index": idx,
+            "home_player_id": away["player_id"],
+            "away_player_id": home["player_id"],
+            "home_club_name": away["club_name"],
+            "home_ign": away["ign"],
+            "away_club_name": home["club_name"],
+            "away_ign": home["ign"],
+            "leg": 2,
+        })
+    sb.table("playoff_fixtures").insert(fixtures).execute()
+    return fixtures
+
+
+def get_playoff_fixtures(league_id: str):
+    sb = get_client()
+    return sb.table("playoff_fixtures").select("*") \
+        .eq("league_id", league_id) \
+        .order("round", "match_index", "leg") \
+        .execute().data
+
+
+def update_playoff_score(fixture_id: str, home_score: int, away_score: int):
+    sb = get_client()
+    sb.table("playoff_fixtures").update({
+        "played": True,
+        "home_score": home_score,
+        "away_score": away_score,
+        "played_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", fixture_id).execute()
+
+
+def unmark_playoff_score(fixture_id: str):
+    sb = get_client()
+    sb.table("playoff_fixtures").update({
+        "played": False,
+        "home_score": None,
+        "away_score": None,
+        "played_at": None,
+    }).eq("id", fixture_id).execute()
+
+
+def get_playoff_ties(league_id: int, round_num: int):
+    """Return ties (grouped by match_index) for a given round,
+    with aggregate scores and away goals computed."""
+    fixtures = get_playoff_fixtures(league_id)
+    ties = {}
+    for f in fixtures:
+        if f["round"] != round_num:
+            continue
+        mi = f["match_index"]
+        if mi not in ties:
+            ties[mi] = {"home": None, "away": None, "leg1": None, "leg2": None}
+        if f["leg"] == 1:
+            ties[mi]["leg1"] = f
+            # home team in tie is home of leg1
+            ties[mi]["home"] = {
+                "player_id": f["home_player_id"],
+                "club_name": f["home_club_name"],
+                "ign": f["home_ign"],
+            }
+            ties[mi]["away"] = {
+                "player_id": f["away_player_id"],
+                "club_name": f["away_club_name"],
+                "ign": f["away_ign"],
+            }
+        else:  # leg 2
+            ties[mi]["leg2"] = f
+    return ties
+
+
+def compute_aggregate(leg1, leg2):
+    """Return (home_agg, away_agg, home_away_goals, away_away_goals, winner_id)"""
+    if not leg1 or not leg2:
+        return None, None, None, None, None
+    h1, a1 = leg1["home_score"], leg1["away_score"]
+    h2, a2 = leg2["home_score"], leg2["away_score"]
+    # Aggregate
+    agg_home = h1 + h2  # home team in tie is leg1 home
+    agg_away = a1 + a2  # away team in tie is leg1 away
+    # Away goals: home team's away goals = a2 (scored in leg2 away), away team's away goals = a1 (scored in leg1 away)
+    away_goals_home = a2
+    away_goals_away = a1
+    winner = None
+    if agg_home > agg_away:
+        winner = leg1["home_player_id"]
+    elif agg_away > agg_home:
+        winner = leg1["away_player_id"]
+    else:
+        # Aggregate tied -> compare away goals
+        if away_goals_home > away_goals_away:
+            winner = leg1["home_player_id"]
+        elif away_goals_away > away_goals_home:
+            winner = leg1["away_player_id"]
+        else:
+            # Still tied -> higher seed wins (we store seed from standings)
+            # We'll handle by raising or returning None; in UI we'll ask admin
+            winner = None  # unresolved
+    return agg_home, agg_away, away_goals_home, away_goals_away, winner
+
+
+def advance_playoff_round(league_id: str, current_round: int):
+    """After all matches of current_round are played, compute winners,
+    create next round fixtures (if current_round < 3).
+    Returns the number of ties advanced."""
+    ties = get_playoff_ties(league_id, current_round)
+    all_played = True
+    for mi, tie in ties.items():
+        if not tie["leg1"] or not tie["leg2"] or not tie["leg1"]["played"] or not tie["leg2"]["played"]:
+            all_played = False
+            break
+    if not all_played:
+        raise ValueError("Not all matches in this round have been played.")
+    winners = []
+    for mi, tie in ties.items():
+        agg_home, agg_away, away_home, away_away, winner_id = compute_aggregate(tie["leg1"], tie["leg2"])
+        if winner_id is None:
+            # Still tied -> we'll use higher seed (lower rank from standings)
+            # We need to get seed: we can fetch standings at generation time? 
+            # For simplicity, we'll store seed in a separate table or compute from name? 
+            # Better: we can ask admin to pick winner. We'll raise error.
+            raise ValueError(f"Match {mi} is still tied after away goals. Please override manually.")
+        winners.append(winner_id)
+
+    if current_round == 1:
+        # QF -> SF: 4 winners, pair them: winner of QF1 vs QF4, QF2 vs QF3
+        # But we need match_index mapping: QF1 (idx1) vs QF4 (idx4), QF2 vs QF3
+        # We'll order winners by match_index
+        winners_by_idx = {mi: winners[mi-1] for mi in range(1,5)}  # mi 1..4
+        sf_pairings = [(1,4), (2,3)]
+        next_round = 2
+        fixtures = []
+        for idx, (a, b) in enumerate(sf_pairings, start=1):
+            home_id = winners_by_idx[a]
+            away_id = winners_by_idx[b]
+            # Get player details
+            players = {p["id"]: p for p in list_players()}
+            home = players.get(home_id)
+            away = players.get(away_id)
+            if not home or not away:
+                raise ValueError("Player not found.")
+            # Leg 1
+            fixtures.append({
+                "league_id": league_id,
+                "round": next_round,
+                "match_index": idx,
+                "home_player_id": home_id,
+                "away_player_id": away_id,
+                "home_club_name": home["club_name"],
+                "home_ign": home["ign"],
+                "away_club_name": away["club_name"],
+                "away_ign": away["ign"],
+                "leg": 1,
+            })
+            # Leg 2
+            fixtures.append({
+                "league_id": league_id,
+                "round": next_round,
+                "match_index": idx,
+                "home_player_id": away_id,
+                "away_player_id": home_id,
+                "home_club_name": away["club_name"],
+                "home_ign": away["ign"],
+                "away_club_name": home["club_name"],
+                "away_ign": home["ign"],
+                "leg": 2,
+            })
+        sb = get_client()
+        sb.table("playoff_fixtures").insert(fixtures).execute()
+        return len(winners)
+
+    elif current_round == 2:
+        # SF -> Final: 2 winners, single leg
+        winners_by_idx = {mi: winners[mi-1] for mi in range(1,3)}
+        home_id = winners_by_idx[1]
+        away_id = winners_by_idx[2]
+        players = {p["id"]: p for p in list_players()}
+        home = players.get(home_id)
+        away = players.get(away_id)
+        if not home or not away:
+            raise ValueError("Player not found.")
+        fixtures = [{
+            "league_id": league_id,
+            "round": 3,
+            "match_index": 1,
+            "home_player_id": home_id,
+            "away_player_id": away_id,
+            "home_club_name": home["club_name"],
+            "home_ign": home["ign"],
+            "away_club_name": away["club_name"],
+            "away_ign": away["ign"],
+            "leg": 1,  # single leg
+        }]
+        sb = get_client()
+        sb.table("playoff_fixtures").insert(fixtures).execute()
+        return len(winners)
+    else:
+        raise ValueError("Invalid round.")
+
+
+def get_playoff_winner(league_id: str):
+    """Return the winner of the final (round=3), if determined."""
+    fixtures = get_playoff_fixtures(league_id)
+    final_fixtures = [f for f in fixtures if f["round"] == 3]
+    if not final_fixtures:
+        return None
+    # final is single leg
+    f = final_fixtures[0]
+    if f["played"]:
+        # winner_id is stored in f["winner_id"] if we set it
+        # We could compute from score
+        if f["home_score"] > f["away_score"]:
+            return f["home_player_id"]
+        elif f["away_score"] > f["home_score"]:
+            return f["away_player_id"]
+        else:
+            # draw -> maybe penalties? We'll store winner manually
+            return None
+    return None
+
 # --------------------------------------------------------------- standings --
+
+
 
 def get_standings(league_id: str):
     """Builds the league table from fixtures' own snapshot names — works
