@@ -955,7 +955,7 @@ elif page_key == "rules":
 3. **After a match, update the score from the Fixtures page** — find your name and your opponent's name, put in the scores, and click **Played**.
 4. **In-game rules** — keep Extra Time and Penalties turned OFF for league matches.
 5. **Playoffs** — the top 8 enter quarter-finals, then semi-finals, with Home & Away ties until the single-match final.
-6. **Away goals** — if a two-legged tie is level on aggregate, the team with more away goals advances. If away goals are also level, Game will go to penalty shootouts without extratime as the game itslef doesn't have 2 legged ties and tracking the results from previous ties becomes a problem.""")
+6. **Away goals** — if a two-legged tie is level on aggregate, the team with more away goals advances. If away goals are also level, Game will go to penalty shootouts without extratime as the game itslef doesn't have 2 legged ties and tracking the results from previous tie becomes a problem.""")
 
 
 # --------------------------------------------------------------------- Admin --
