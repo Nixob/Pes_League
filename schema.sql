@@ -22,7 +22,14 @@ create table if not exists leagues (
     status text not null default 'active' check (status in ('active', 'completed')),
     winner_player_id uuid references players(id) on delete set null,
     started_at timestamptz not null default now(),
-    completed_at timestamptz
+    completed_at timestamptz,
+    -- Leg 1 / Leg 2 close automatically at 12:00 PM IST on these dates
+    -- (enforced in app code, not the DB); NULL means "no deadline set".
+    deadline date,
+    leg2_deadline date,
+    -- Leg 2 fixtures are hidden/locked until the admin explicitly opens
+    -- them (normally once every Leg 1 fixture has been played).
+    leg2_unlocked boolean not null default false
 );
 
 -- Which players are in a given league
@@ -32,7 +39,11 @@ create table if not exists league_participants (
     primary key (league_id, player_id)
 );
 
--- Fixtures (auto-generated home & away round robin when a league starts)
+-- Fixtures (auto-generated home & away round robin when a league starts).
+-- Also doubles as the knockout-playoff table: leg 1/2 are the league's
+-- two legs, and legs 3-7 are the top-8 bracket (3/4 = QF leg1/leg2,
+-- 5/6 = SF leg1/leg2, 7 = the single-match final). See QF_LEG1 etc. in
+-- db.py for the authoritative mapping.
 -- home/away club_name + ign are snapshotted at fixture-creation time so
 -- that deleting a player later doesn't erase history.
 create table if not exists fixtures (
@@ -44,10 +55,13 @@ create table if not exists fixtures (
     home_ign text,
     away_club_name text,
     away_ign text,
-    leg int not null check (leg in (1, 2)), -- 1 = first meeting, 2 = reverse fixture
+    leg int not null check (leg between 1 and 7),
     played boolean not null default false,
     home_score int,
     away_score int,
+    -- True when this result was auto-resolved (or admin-recorded) as a
+    -- no-show rather than an actually-played match.
+    forfeit boolean not null default false,
     played_at timestamptz
 );
 
