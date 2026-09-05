@@ -20,11 +20,11 @@ PAGE_LABELS = {
 
 PAGE_ICONS = {
     "Fixtures",
-    "Table":,
-    "Playoffs":,
-    "History":,
-    "Register":,
-    "Rules":,
+    "Table",
+    "Playoffs",
+    "History",
+    "Register",
+    "Rules",
     "Admin":
 }
 
