@@ -531,10 +531,11 @@ elif page_key == "fixtures":
             visible_fixtures = [f for f in visible_fixtures if f["leg"] == wanted_leg]
 
         @st.fragment
-        def render_fixture_card(fixture_id: str, leg2_unlocked: bool, leg_closed: bool):
+        def render_fixture_card(fixture_id: str, leg2_unlocked: bool, leg_closed: bool, playoffs_locked: bool):
             f = db.get_fixture(fixture_id)
             if f is None:
                 return
+            locked = leg_closed or playoffs_locked
             with st.container(border=True):
                 leg_tag = f"Leg {f['leg']}"
                 if f["played"] and f.get("forfeit"):
@@ -549,12 +550,15 @@ elif page_key == "fixtures":
                 )
                 if f["played"]:
                     st.markdown(f":green[✅ **{f['home_score']} – {f['away_score']}**]")
-                    if leg_closed:
-                        st.markdown('<p class="muted">🔒 Leg closed — only the admin can change this now.</p>', unsafe_allow_html=True)
+                    if locked:
+                        reason = "Leg closed" if leg_closed else "Playoffs have started"
+                        st.markdown(f'<p class="muted">🔒 {reason} — only the admin can change this now.</p>', unsafe_allow_html=True)
                     elif render_undo_control(f["id"], "fx"):
                         st.toast("Result undone.", icon="↩️")
                 elif f["leg"] == 2 and not leg2_unlocked:
                     st.markdown('<p class="muted">🔒 Locked until Leg 1 is complete.</p>', unsafe_allow_html=True)
+                elif playoffs_locked:
+                    st.markdown('<p class="muted">🔒 Playoffs have started — league results are now locked. Contact the admin for corrections.</p>', unsafe_allow_html=True)
                 elif leg_closed:
                     st.markdown('<p class="muted">🔒 Leg closed — this will be auto-resolved shortly, or fixed by the admin.</p>', unsafe_allow_html=True)
                 else:
@@ -562,9 +566,10 @@ elif page_key == "fixtures":
                         st.toast("Result saved ✅", icon="✅")
 
 
+        playoffs_locked = db.playoffs_started(league["id"])
         for f in visible_fixtures:
             fixture_leg_closed = leg1_closed if f["leg"] == 1 else leg2_closed
-            render_fixture_card(f["id"], league["leg2_unlocked"], fixture_leg_closed)
+            render_fixture_card(f["id"], league["leg2_unlocked"], fixture_leg_closed, playoffs_locked)
 
 
 # --------------------------------------------------------------------- Table --
