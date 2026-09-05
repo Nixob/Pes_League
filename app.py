@@ -67,31 +67,6 @@ html, body, .stApp { background-color: var(--bg) !important; }
     margin-bottom: 1.6rem;
 }
 
-/* --- page nav dropdown: make the selectbox look like a big heading --- */
-div[data-testid="stSelectbox"] {
-    max-width: 340px;
-    margin: 0 auto 2.2rem auto;
-}
-div[data-testid="stSelectbox"] label { display: none; }
-div[data-testid="stSelectbox"] > div > div {
-    background-color: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-}
-div[data-testid="stSelectbox"] [data-baseweb="select"] > div {
-    background-color: transparent !important;
-    border: none !important;
-    font-family: 'Poppins', sans-serif;
-    font-weight: 600;
-    font-size: 1.8rem;
-    color: var(--accent) !important;
-    justify-content: center;
-    text-align: center;
-    padding-left: 0;
-}
-div[data-testid="stSelectbox"] svg { fill: var(--accent) !important; }
-div[data-testid="stSelectbox"] input { text-align: center; }
-
 /* --- custom table matching the sketch: thin grey grid, purple header --- */
 .league-table-wrap {
     display: flex;
@@ -250,64 +225,7 @@ table.league-table tr.playoff-row td:first-child {
 }
 .bracket-pending { opacity: 0.6; }
 
-/* connectors – simple lines (no arrows) using pseudo-elements */
-.bracket-connector {
-    position: relative;
-}
-.bracket-connector::after {
-    content: '';
-    position: absolute;
-    background: var(--line);
-}
-
-/* horizontal lines from QF1 to SF1 (row1 col1 to row2 col2) */
-.qf1-to-sf1::after {
-    right: -16px;
-    top: 50%;
-    width: 16px;
-    height: 2px;
-}
-/* horizontal from SF1 to Final */
-.sf1-to-final::after {
-    right: -16px;
-    top: 50%;
-    width: 16px;
-    height: 2px;
-}
-/* horizontal from Final to SF2 */
-.final-to-sf2::after {
-    right: -16px;
-    top: 50%;
-    width: 16px;
-    height: 2px;
-}
-/* horizontal from SF2 to QF3/QF4 */
-.sf2-to-qf3::after {
-    right: -16px;
-    top: 50%;
-    width: 16px;
-    height: 2px;
-}
-
-/* vertical lines from QF1 and QF2 to meet the horizontal before SF1 */
-.qf1-to-sf1-vertical::after {
-    right: -16px;
-    top: 50%;
-    width: 2px;
-    height: 80px;  /* spans both QF rows */
-}
-
-/* Similar for right side */
-.qf3-to-sf2-vertical::before {
-    left: -16px;
-    top: 50%;
-    width: 2px;
-    height: 80px;
-}
-
-/* but we'll use a different approach: we can put connectors in separate cells, but easier: just use a container that spans rows and use borders */
-
-/* I'll simplify: we'll rely on the grid positions and not draw complex lines, just horizontal arrows (optional) */
+/* connectors between bracket cards — simple directional arrows */
 .bracket-arrow {
     position: relative;
 }
@@ -437,6 +355,41 @@ def standings_rows(table):
         "P": r["played"], "W": r["won"], "D": r["drawn"], "L": r["lost"],
         "GF": r["gf"], "GA": r["ga"], "GD": r["gd"], "Pts": r["points"],
     } for i, r in enumerate(table)]
+
+
+def render_undo_control(fixture_id: str, key_prefix: str) -> bool:
+    """Renders an 'Undo' button with a Yes/Cancel confirmation step for a
+    played fixture, sharing the pattern used on the Fixtures page, the
+    playoff tie editor, and the final. Returns True the instant the result
+    is actually undone, so the caller can toast / rerun as needed."""
+    confirm_key = f"{key_prefix}_undo_confirm_{fixture_id}"
+    c1, c2 = st.columns([3, 1])
+    if st.session_state.get(confirm_key):
+        c1.markdown('<p class="muted">Undo this result?</p>', unsafe_allow_html=True)
+        if c2.button("Yes, undo", key=f"{key_prefix}_undo_yes_{fixture_id}", use_container_width=True):
+            db.unmark_result(fixture_id)
+            st.session_state[confirm_key] = False
+            return True
+        if c2.button("Cancel", key=f"{key_prefix}_undo_no_{fixture_id}", use_container_width=True):
+            st.session_state[confirm_key] = False
+    else:
+        if c2.button("Undo", key=f"{key_prefix}_undo_{fixture_id}", use_container_width=True):
+            st.session_state[confirm_key] = True
+    return False
+
+
+def render_score_entry(fixture_id: str, key_prefix: str, home_label: str, away_label: str, button_label: str = "Save") -> bool:
+    """Renders the paired home/away number inputs + save button used to
+    submit a result, shared across the Fixtures page, playoff tie editor,
+    and the final. Returns True the instant a result is saved."""
+    c1, c2, c3 = st.columns([1, 1, 1.4])
+    hs = c1.number_input(home_label, min_value=0, max_value=20, step=1, key=f"{key_prefix}_hs_{fixture_id}")
+    aws = c2.number_input(away_label, min_value=0, max_value=20, step=1, key=f"{key_prefix}_as_{fixture_id}")
+    c3.markdown("<div style='height: 1.6rem'></div>", unsafe_allow_html=True)
+    if c3.button(button_label, key=f"{key_prefix}_tick_{fixture_id}", use_container_width=True):
+        db.submit_result(fixture_id, int(hs), int(aws))
+        return True
+    return False
 
 
 # --------------------------------------------------------------------- UI --
@@ -595,38 +548,18 @@ elif page_key == "fixtures":
                     unsafe_allow_html=True,
                 )
                 if f["played"]:
+                    st.markdown(f":green[✅ **{f['home_score']} – {f['away_score']}**]")
                     if leg_closed:
-                        st.markdown(f":green[✅ **{f['home_score']} – {f['away_score']}**]")
                         st.markdown('<p class="muted">🔒 Leg closed — only the admin can change this now.</p>', unsafe_allow_html=True)
-                    else:
-                        confirm_key = f"confirm_undo_{f['id']}"
-                        if st.session_state.get(confirm_key):
-                            st.markdown(f":green[✅ **{f['home_score']} – {f['away_score']}**]")
-                            st.markdown('<p class="muted">Undo this result?</p>', unsafe_allow_html=True)
-                            yc, nc = st.columns(2)
-                            if yc.button("Yes, undo", key=f"undo_yes_{f['id']}", use_container_width=True):
-                                db.unmark_result(f["id"])
-                                st.session_state[confirm_key] = False
-                                st.toast("Result undone.", icon="↩️")
-                            if nc.button("Cancel", key=f"undo_no_{f['id']}", use_container_width=True):
-                                st.session_state[confirm_key] = False
-                        else:
-                            c1, c2 = st.columns([3, 1])
-                            c1.markdown(f":green[✅ **{f['home_score']} – {f['away_score']}**]")
-                            if c2.button("Undo", key=f"undo_{f['id']}", use_container_width=True):
-                                st.session_state[confirm_key] = True
+                    elif render_undo_control(f["id"], "fx"):
+                        st.toast("Result undone.", icon="↩️")
                 elif f["leg"] == 2 and not leg2_unlocked:
                     st.markdown('<p class="muted">🔒 Locked until Leg 1 is complete.</p>', unsafe_allow_html=True)
                 elif leg_closed:
                     st.markdown('<p class="muted">🔒 Leg closed — this will be auto-resolved shortly, or fixed by the admin.</p>', unsafe_allow_html=True)
                 else:
-                    c1, c2, c3 = st.columns([1, 1, 1.4])
-                    hs = c1.number_input("Home", min_value=0, max_value=20, step=1, key=f"hs_{f['id']}")
-                    aws = c2.number_input("Away", min_value=0, max_value=20, step=1, key=f"as_{f['id']}")
-                    c3.markdown("<div style='height: 1.6rem'></div>", unsafe_allow_html=True)
-                    if c3.button("✅ Played", key=f"tick_{f['id']}", use_container_width=True):
-                        db.submit_result(f["id"], int(hs), int(aws))
-                        st.toast(f"Result saved — {int(hs)}–{int(aws)}", icon="✅")
+                    if render_score_entry(f["id"], "fx", "Home", "Away", "✅ Played"):
+                        st.toast("Result saved ✅", icon="✅")
 
 
         for f in visible_fixtures:
@@ -719,24 +652,28 @@ elif page_key == "playoffs":
             return [groups[k] for k in order]
 
         def tie_label(tie, leg1_no, leg2_no):
+            """Returns (home_ign, away_ign, agg_str, winner_id, reason,
+            home_id, away_id). The two *_id fields are what winner_id should
+            actually be compared against — home_ign/away_ign are just display
+            strings, never player ids."""
             data = tie_data(tie, leg1_no, leg2_no)
             if not data:
-                return ("TBD", "TBD", "–", None, None)
+                return ("TBD", "TBD", "–", None, None, None, None)
             f1, f2, a, b, agg, away, winner, reason = data
             return (
                 f1["home_ign"], f1["away_ign"],
                 f'{agg[a]} – {agg[b]}' if any(f["played"] for f in (f1, f2)) else "–",
-                winner, reason,
+                winner, reason, a, b,
             )
 
         qf_groups = grouped_ties(qfs, db.QF_LEG1, db.QF_LEG2)
         sf_groups = grouped_ties(sfs, db.SF_LEG1, db.SF_LEG2)
 
         if qf_groups:
-            qf_cards=[]
-            for i,tie in enumerate(qf_groups,1):
-                n1,n2,agg,winner,reason=tie_label(tie,db.QF_LEG1,db.QF_LEG2)
-                qf_cards.append((i,n1,n2,agg,winner))
+            qf_cards = []
+            for i, tie in enumerate(qf_groups, 1):
+                n1, n2, agg, winner, reason, home_id, away_id = tie_label(tie, db.QF_LEG1, db.QF_LEG2)
+                qf_cards.append((i, n1, n2, agg, winner, home_id, away_id))
             # Build bracket grid items
             left_qf1 = qf_cards[0] if len(qf_cards) > 0 else None
             left_qf2 = qf_cards[1] if len(qf_cards) > 1 else None
@@ -751,9 +688,11 @@ elif page_key == "playoffs":
             def match_html(card, round_label, winner_class=''):
                 if not card:
                     return f'<div class="bracket-match bracket-pending"><div class="bracket-round">{round_label}</div><div class="bracket-team"><span>—</span></div><div class="bracket-team"><span>—</span></div></div>'
-                i, n1, n2, agg, winner = card
-                w1 = ' winner' if winner and winner == n1 else ''
-                w2 = ' winner' if winner and winner == n2 else ''
+                i, n1, n2, agg, winner, home_id, away_id = card
+                # NOTE: compare winner (a player id) against home_id/away_id —
+                # never against n1/n2, which are just display names.
+                w1 = ' winner' if winner and winner == home_id else ''
+                w2 = ' winner' if winner and winner == away_id else ''
                 return f'''<div class="bracket-match {winner_class}">
                     <div class="bracket-round">{round_label}</div>
                     <div class="bracket-team{w1}"><span>{n1}</span></div>
@@ -763,7 +702,7 @@ elif page_key == "playoffs":
 
             # Build SF cards
             if sf1:
-                n1,n2,agg,winner,reason = tie_label(sf1, db.SF_LEG1, db.SF_LEG2)
+                n1, n2, agg, winner, reason, _, _ = tie_label(sf1, db.SF_LEG1, db.SF_LEG2)
                 sf1_html = f'''<div class="bracket-match"><div class="bracket-round">SF 1</div>
                     <div class="bracket-team{' winner' if winner and winner==sf1[0]['home_player_id'] else ''}"><span>{n1}</span></div>
                     <div class="bracket-team{' winner' if winner and winner==sf1[0]['away_player_id'] else ''}"><span>{n2}</span></div>
@@ -772,7 +711,7 @@ elif page_key == "playoffs":
                 sf1_html = '<div class="bracket-match bracket-pending"><div class="bracket-round">SF 1</div><div class="bracket-team"><span>Winner QF1</span></div><div class="bracket-team"><span>Winner QF2</span></div></div>'
 
             if sf2:
-                n1,n2,agg,winner,reason = tie_label(sf2, db.SF_LEG1, db.SF_LEG2)
+                n1, n2, agg, winner, reason, _, _ = tie_label(sf2, db.SF_LEG1, db.SF_LEG2)
                 sf2_html = f'''<div class="bracket-match"><div class="bracket-round">SF 2</div>
                     <div class="bracket-team{' winner' if winner and winner==sf2[0]['home_player_id'] else ''}"><span>{n1}</span></div>
                     <div class="bracket-team{' winner' if winner and winner==sf2[0]['away_player_id'] else ''}"><span>{n2}</span></div>
@@ -834,31 +773,14 @@ elif page_key == "playoffs":
                         home_label = f"{f['home_ign']} (H)"
                         away_label = f"{f['away_ign']} (A)"
                         if f["played"]:
-                            c1, c2 = st.columns([3, 1])
-                            c1.markdown(f"**{label}:** {home_label} vs {away_label} — :green[**{f['home_score']} – {f['away_score']}**]")
+                            st.markdown(f"**{label}:** {home_label} vs {away_label} — :green[**{f['home_score']} – {f['away_score']}**]")
                             if not round_has_next and league.get("status") == "active":
-                                undo_key = f"po_undo_confirm_{f['id']}"
-                                if st.session_state.get(undo_key):
-                                    c1.caption("Undo this result?")
-                                    if c2.button("Yes, undo", key=f"po_undo_yes_{f['id']}", use_container_width=True):
-                                        db.unmark_result(f["id"])
-                                        st.session_state.pop(undo_key, None)
-                                        st.rerun()
-                                    if c2.button("Cancel", key=f"po_undo_no_{f['id']}", use_container_width=True):
-                                        st.session_state.pop(undo_key, None)
-                                        st.rerun()
-                                else:
-                                    if c2.button("Undo", key=f"po_undo_{f['id']}", use_container_width=True):
-                                        st.session_state[undo_key] = True
-                                        st.rerun()
+                                if render_undo_control(f["id"], "po"):
+                                    st.rerun()
                             elif round_has_next:
-                                c2.caption("🔒 Round advanced")
+                                st.caption("🔒 Round advanced")
                         elif league.get("status") == "active":
-                            c1, c2, c3 = st.columns([1, 1, 1.25])
-                            hs = c1.number_input(f"{label} {home_label}", min_value=0, max_value=20, step=1, key=f"po_hs_{f['id']}")
-                            aws = c2.number_input(f"{label} {away_label}", min_value=0, max_value=20, step=1, key=f"po_as_{f['id']}")
-                            if c3.button(f"Save {label}", key=f"po_played_{f['id']}", use_container_width=True):
-                                db.submit_result(f["id"], int(hs), int(aws))
+                            if render_score_entry(f["id"], "po", f"{label} {home_label}", f"{label} {away_label}", f"Save {label}"):
                                 st.rerun()
                     st.caption(f"Aggregate: {agg[a]} – {agg[b]}  •  Away goals: {away[a]} – {away[b]}")
                     if winner:
@@ -876,33 +798,16 @@ elif page_key == "playoffs":
                 with st.container(border=True):
                     st.markdown(f'**{f["home_ign"]}** vs **{f["away_ign"]}**')
                     if f["played"]:
-                        c1, c2 = st.columns([3, 1])
-                        c1.markdown(f':green[🏆 **{f["home_score"]} – {f["away_score"]}**]')
+                        st.markdown(f':green[🏆 **{f["home_score"]} – {f["away_score"]}**]')
                         if league.get("status") == "active":
-                            undo_key = f"po_final_undo_confirm_{f['id']}"
-                            if st.session_state.get(undo_key):
-                                c2.caption("Undo this result?")
-                                if c2.button("Yes, undo", key=f"po_final_undo_yes_{f['id']}", use_container_width=True):
-                                    db.unmark_result(f["id"])
-                                    st.session_state.pop(undo_key, None)
-                                    st.rerun()
-                                if c2.button("Cancel", key=f"po_final_undo_no_{f['id']}", use_container_width=True):
-                                    st.session_state.pop(undo_key, None)
-                                    st.rerun()
-                            else:
-                                if c2.button("Undo", key=f"po_final_undo_{f['id']}", use_container_width=True):
-                                    st.session_state[undo_key] = True
-                                    st.rerun()
+                            if render_undo_control(f["id"], "po"):
+                                st.rerun()
                         champion = db.playoff_champion(league["id"])
                         if champion:
                             winner_name = f["home_ign"] if champion == f["home_player_id"] else f["away_ign"]
                             st.success(f"🏆 Champion: {winner_name}")
                     elif league.get("status") == "active":
-                        c1, c2, c3 = st.columns([1, 1, 1.25])
-                        hs = c1.number_input("Final H", min_value=0, max_value=20, step=1, key=f"po_final_hs_{f['id']}")
-                        aws = c2.number_input("Final A", min_value=0, max_value=20, step=1, key=f"po_final_as_{f['id']}")
-                        if c3.button("Save Final", key=f"po_final_{f['id']}", use_container_width=True):
-                            db.submit_result(f["id"], int(hs), int(aws))
+                        if render_score_entry(f["id"], "po", "Final H", "Final A", "Save Final"):
                             st.rerun()
         else:
             st.info("The top-8 playoff bracket will appear here once the league stage is completed.")
@@ -955,7 +860,8 @@ elif page_key == "rules":
 3. **After a match, update the score from the Fixtures page** — find your name and your opponent's name, put in the scores, and click **Played**.
 4. **In-game rules** — keep Extra Time and Penalties turned OFF for league matches.
 5. **Playoffs** — the top 8 enter quarter-finals, then semi-finals, with Home & Away ties until the single-match final.
-6. **Away goals** — if a two-legged tie is level on aggregate, the team with more away goals advances. If away goals are also level, Game will go to penalty shootouts without extratime as the game itslef doesn't have 2 legged ties and tracking the results from previous tie becomes a problem.""")
+6. **Away goals** — if a two-legged tie is level on aggregate, the team with more away goals advances. If away goals are also level, the higher league seed advances.
+""")
 
 
 # --------------------------------------------------------------------- Admin --
