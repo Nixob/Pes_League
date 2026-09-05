@@ -25,7 +25,7 @@ PAGE_ICONS = {
     "History",
     "Register",
     "Rules",
-    "Admin":
+    "Admin",
 }
 
 
