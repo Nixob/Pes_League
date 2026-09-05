@@ -19,13 +19,13 @@ PAGE_LABELS = {
 }
 
 PAGE_ICONS = {
-    "Fixtures",
-    "Table",
-    "Playoffs",
-    "History",
-    "Register",
-    "Rules",
-    "Admin",
+    "fixtures": "⚽",
+    "table": "🏆",
+    "playoffs": "🥇",
+    "history": "📜",
+    "register": "➕",
+    "rules": "📋",
+    "admin": "🔐",
 }
 
 
