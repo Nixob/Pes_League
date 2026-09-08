@@ -650,6 +650,19 @@ elif page_key == "playoffs":
         qf_groups = grouped_ties(qfs, db.QF_LEG1, db.QF_LEG2)
         sf_groups = grouped_ties(sfs, db.SF_LEG1, db.SF_LEG2)
 
+        # QF ties must keep a STABLE label regardless of what order the DB
+        # happens to return fixtures in (that order can shift after any
+        # update, e.g. saving a score) — so label by seed pairing instead
+        # of list position: 1v8 -> QF1, 4v5 -> QF2, 2v7 -> QF3, 3v6 -> QF4.
+        _seeds_for_qf = {r["player_id"]: i + 1 for i, r in enumerate(db.get_standings(league["id"])[:8])}
+        _QF_SLOTS = {frozenset({1, 8}): 1, frozenset({4, 5}): 2, frozenset({2, 7}): 3, frozenset({3, 6}): 4}
+
+        def _qf_slot(group):
+            pair = frozenset({_seeds_for_qf.get(group[0]["home_player_id"]), _seeds_for_qf.get(group[0]["away_player_id"])})
+            return _QF_SLOTS.get(pair, 99)
+
+        qf_groups = sorted(qf_groups, key=_qf_slot)
+
         if qf_groups:
             qf_cards = []
             for i, tie in enumerate(qf_groups, 1):
