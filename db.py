@@ -385,53 +385,69 @@ def _round_exists(fixtures, legs):
 
 
 def advance_playoffs(league_id: str) -> bool:
-    """Automatically creates the next knockout round when the previous round is done."""
+    """Automatically creates the next knockout round once it's ready. Each
+    semi-final tie is created independently, as soon as its own two feeder
+    quarter-finals are decided — it does not wait for the other half of the
+    bracket to finish too."""
     fixtures = list_fixtures(league_id)
     if not playoffs_started(league_id):
         return False
     players = {p["id"]: p for p in list_players()}
     seeds = _seed_order(league_id)
+    advanced = False
 
-    # Quarter-finals -> semi-finals.
-    if not _round_exists(fixtures, (SF_LEG1, SF_LEG2)):
-        groups = _tie_groups(fixtures, QF_LEG1, QF_LEG2)
-        if len(groups) != 4 or not all(len(g) == 2 and all(f["played"] for f in g) for g in groups):
-            return False
+    # Quarter-finals -> semi-finals, one SF pair at a time.
+    qf_groups = _tie_groups(fixtures, QF_LEG1, QF_LEG2)
+    winners_by_seeds = {}
+    for tie in qf_groups:
+        ids = {pid for f in tie for pid in (f["home_player_id"], f["away_player_id"])}
+        seed_pair = tuple(sorted(seeds.get(pid, 99) for pid in ids))
+        winner = _tie_winner(tie, QF_LEG1, QF_LEG2, seeds)
+        if winner:
+            winners_by_seeds[seed_pair] = winner
 
-        winners_by_seeds = {}
-        for tie in groups:
-            ids = {pid for f in tie for pid in (f["home_player_id"], f["away_player_id"])}
-            seed_pair = tuple(sorted(seeds.get(pid, 99) for pid in ids))
-            winners_by_seeds[seed_pair] = _tie_winner(tie, QF_LEG1, QF_LEG2, seeds)
+    sf_pairs = [
+        (winners_by_seeds.get((1, 8)), winners_by_seeds.get((4, 5))),
+        (winners_by_seeds.get((2, 7)), winners_by_seeds.get((3, 6))),
+    ]
+    existing_sf_pair_ids = {
+        frozenset(pid for f in g for pid in (f["home_player_id"], f["away_player_id"]))
+        for g in _tie_groups(fixtures, SF_LEG1, SF_LEG2)
+    }
+    new_sf_rows = []
+    for a, b in sf_pairs:
+        if a and b and frozenset([a, b]) not in existing_sf_pair_ids:
+            new_sf_rows.append(_playoff_row(league_id, a, b, players, SF_LEG1))
+            new_sf_rows.append(_playoff_row(league_id, b, a, players, SF_LEG2))
+    if new_sf_rows:
+        get_client().table("fixtures").insert(new_sf_rows).execute()
+        advanced = True
+        fixtures = list_fixtures(league_id)  # refresh for the final-round check below
 
-        sf_pairs = [
-            (winners_by_seeds.get((1, 8)), winners_by_seeds.get((4, 5))),
-            (winners_by_seeds.get((2, 7)), winners_by_seeds.get((3, 6))),
-        ]
-        if not all(a and b for a, b in sf_pairs):
-            return False
-
-        rows = []
-        for a, b in sf_pairs:
-            rows.append(_playoff_row(league_id, a, b, players, SF_LEG1))
-            rows.append(_playoff_row(league_id, b, a, players, SF_LEG2))
-        get_client().table("fixtures").insert(rows).execute()
-        return True
-
-    # Semi-finals -> final.
+    # Semi-finals -> final (unchanged: the final can only ever be created once
+    # both semi-final ties exist and are both decided, so there's no partial
+    # case to handle here the way there is for quarter-finals).
     if not _round_exists(fixtures, (FINAL_LEG,)):
         groups = _tie_groups(fixtures, SF_LEG1, SF_LEG2)
-        if len(groups) != 2 or not all(len(g) == 2 and all(f["played"] for f in g) for g in groups):
-            return False
-        winners = [_tie_winner(g, SF_LEG1, SF_LEG2, seeds) for g in groups]
-        if not all(winners):
-            return False
-        get_client().table("fixtures").insert([
-            _playoff_row(league_id, winners[0], winners[1], players, FINAL_LEG)
-        ]).execute()
-        return True
+        if len(groups) == 2 and all(len(g) == 2 and all(f["played"] for f in g) for g in groups):
+            winners = [_tie_winner(g, SF_LEG1, SF_LEG2, seeds) for g in groups]
+            if all(winners):
+                get_client().table("fixtures").insert([
+                    _playoff_row(league_id, winners[0], winners[1], players, FINAL_LEG)
+                ]).execute()
+                advanced = True
 
-    return False
+    return advanced
+
+
+def tie_has_advanced(winner_id: str | None, next_round_fixtures: list[dict]) -> bool:
+    """True once a decided tie's winner has actually been placed into the
+    next round's fixtures — used to lock editing/undo on a *specific* tie
+    rather than the whole previous round at once, since semi-finals (and
+    therefore the QF->SF lock) can now be created one pair at a time."""
+    if not winner_id:
+        return False
+    return any(winner_id in (f["home_player_id"], f["away_player_id"]) for f in next_round_fixtures)
 
 
 def playoff_champion(league_id: str):
