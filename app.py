@@ -681,7 +681,7 @@ elif page_key == "playoffs":
             # group is classified by the actual seed of a participant instead,
             # so the bracket visual and the labels below always match reality
             # regardless of which half finished first.
-            seeds = {r["player_id"]: i + 1 for i, r in enumerate(db.get_standings(league["id"])[:8])}
+                       seeds = _seeds_for_qf
 
             def sf_group_side(group):
                 """'A' = fed by QF1+QF2 (seeds 1/8/4/5), 'B' = fed by QF3+QF4 (seeds 2/7/3/6)."""
