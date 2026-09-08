@@ -225,29 +225,6 @@ table.league-table tr.playoff-row td:first-child {
 }
 .bracket-pending { opacity: 0.6; }
 
-/* connectors between bracket cards — simple directional arrows */
-.bracket-arrow {
-    position: relative;
-}
-.bracket-arrow::after {
-    content: '▶';
-    position: absolute;
-    right: -12px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--accent);
-    font-size: 0.7rem;
-}
-.bracket-arrow-left::before {
-    content: '◀';
-    position: absolute;
-    left: -12px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--accent);
-    font-size: 0.7rem;
-}
-
 @media (max-width: 640px) {
     .block-container { padding-left: 0.6rem; padding-right: 0.6rem; }
     .brand-bar { font-size: 1.25rem; }
@@ -267,7 +244,6 @@ table.league-table tr.playoff-row td:first-child {
     .bracket-round { font-size: 0.5rem; }
     .bracket-agg-mini { font-size: 0.48rem; }
     .bracket-final-score { font-size: 0.6rem; }
-    .bracket-arrow::after, .bracket-arrow-left::before { font-size: 0.6rem; right: -8px; left: -8px; }
 }
 
 /* --- section headings --- */
@@ -685,9 +661,22 @@ elif page_key == "playoffs":
             right_qf1 = qf_cards[2] if len(qf_cards) > 2 else None
             right_qf2 = qf_cards[3] if len(qf_cards) > 3 else None
 
-            # SF and final info
-            sf1 = sf_groups[0] if len(sf_groups) > 0 else None
-            sf2 = sf_groups[1] if len(sf_groups) > 1 else None
+            # SF and final info. Semi-final ties are now created independently
+            # as each half of the bracket finishes (see db.advance_playoffs),
+            # so which one lands in the fixtures table first is no longer
+            # reliable — sf_groups[0] is NOT always "the QF1/QF2 semi". Each
+            # group is classified by the actual seed of a participant instead,
+            # so the bracket visual and the labels below always match reality
+            # regardless of which half finished first.
+            seeds = {r["player_id"]: i + 1 for i, r in enumerate(db.get_standings(league["id"])[:8])}
+
+            def sf_group_side(group):
+                """'A' = fed by QF1+QF2 (seeds 1/8/4/5), 'B' = fed by QF3+QF4 (seeds 2/7/3/6)."""
+                seed = seeds.get(group[0]["home_player_id"])
+                return 'A' if seed in (1, 4, 5, 8) else 'B'
+
+            sf1 = next((g for g in sf_groups if sf_group_side(g) == 'A'), None)
+            sf2 = next((g for g in sf_groups if sf_group_side(g) == 'B'), None)
             final_match = final[0] if final else None
 
             def match_html(card, round_label, winner_class=''):
@@ -746,15 +735,15 @@ elif page_key == "playoffs":
             <div class="bracket-wrap">
                 <div class="bracket-board" style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr 1fr; grid-template-rows:auto auto auto; gap:20px 8px; min-width:640px; padding:0.5rem; justify-items:center; align-items:center;">
                     <!-- Row 1: QF1 (col1), QF3 (col5) -->
-                    <div style="grid-column:1; grid-row:1; width:100%;" class="bracket-arrow">{match_html(left_qf1, 'QF 1')}</div>
-                    <div style="grid-column:5; grid-row:1; width:100%;" class="bracket-arrow-left">{match_html(right_qf1, 'QF 3')}</div>
+                    <div style="grid-column:1; grid-row:1; width:100%;">{match_html(left_qf1, 'QF 1')}</div>
+                    <div style="grid-column:5; grid-row:1; width:100%;">{match_html(right_qf1, 'QF 3')}</div>
                     <!-- Row 2: SF1 (col2), Final (col3), SF2 (col4) -->
-                    <div style="grid-column:2; grid-row:2; width:100%;" class="bracket-arrow">{sf1_html}</div>
+                    <div style="grid-column:2; grid-row:2; width:100%;">{sf1_html}</div>
                     <div style="grid-column:3; grid-row:2; width:100%;">{final_html}</div>
-                    <div style="grid-column:4; grid-row:2; width:100%;" class="bracket-arrow-left">{sf2_html}</div>
+                    <div style="grid-column:4; grid-row:2; width:100%;">{sf2_html}</div>
                     <!-- Row 3: QF2 (col1), QF4 (col5) -->
-                    <div style="grid-column:1; grid-row:3; width:100%;" class="bracket-arrow">{match_html(left_qf2, 'QF 2')}</div>
-                    <div style="grid-column:5; grid-row:3; width:100%;" class="bracket-arrow-left">{match_html(right_qf2, 'QF 4')}</div>
+                    <div style="grid-column:1; grid-row:3; width:100%;">{match_html(left_qf2, 'QF 2')}</div>
+                    <div style="grid-column:5; grid-row:3; width:100%;">{match_html(right_qf2, 'QF 4')}</div>
                 </div>
             </div>
             '''
@@ -816,8 +805,9 @@ elif page_key == "playoffs":
                 if not sf_groups:
                     st.markdown('<p class="muted">Semi-finals unlock as soon as both feeder quarter-finals for a half of the bracket are decided.</p>', unsafe_allow_html=True)
                 else:
-                    for i, tie in enumerate(sf_groups, 1):
-                        render_tie_editor(tie, f"SF {i}")
+                    for i, tie in ((1, sf1), (2, sf2)):
+                        if tie:
+                            render_tie_editor(tie, f"SF {i}")
 
             with final_tab:
                 if not final:
