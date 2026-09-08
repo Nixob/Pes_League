@@ -485,8 +485,13 @@ def delete_league(league_id: str):
 
 def list_fixtures(league_id: str):
     sb = get_client()
+    # Ordered by leg, then id, so the row order is fully deterministic. Without
+    # a secondary sort key, Postgres does not guarantee a stable order for rows
+    # that share the same leg value — which silently corrupts anything built by
+    # comparing two separate calls to this function (e.g. seed numbers computed
+    # once when the playoff bracket is drawn, then recomputed again later).
     return sb.table("fixtures").select("*") \
-        .eq("league_id", league_id).order("leg").execute().data
+        .eq("league_id", league_id).order("leg").order("id").execute().data
 
 
 def get_fixture(fixture_id: str):
@@ -600,4 +605,10 @@ def get_standings(league_id: str):
     for s in stats.values():
         s["gd"] = s["gf"] - s["ga"]
 
-    return sorted(stats.values(), key=lambda s: (-s["points"], -s["gd"], -s["gf"]))
+    # The dict key (stats.keys()) is either the player_id or a deterministic
+    # "deleted:club|ign" string — always unique and stable — so using it as
+    # the final tiebreak guarantees the same order on every call, even when
+    # two players are exactly tied on points/GD/GF. Without this, players
+    # tied on all three could silently swap positions between calls, which
+    # is exactly what was corrupting playoff seeding.
+    return [s for _, s in sorted(stats.items(), key=lambda kv: (-kv[1]["points"], -kv[1]["gd"], -kv[1]["gf"], str(kv[0])))]
