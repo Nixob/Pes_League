@@ -468,7 +468,44 @@ def playoff_champion(league_id: str):
     if f["away_score"] > f["home_score"]:
         return f["away_player_id"]
     return None
+def resolve_playoffs_by_deadline(league_id: str):
+    """Called once a playoff deadline has passed. If the final has already
+    produced a champion through normal play, this is a no-op. Otherwise it
+    works out who's still alive among the original top-8 seeds — anyone
+    who hasn't lost a *decided* quarter-final or semi-final tie — and
+    crowns the best remaining seed champion directly, with no further
+    matches required. Covers every case: nobody's played -> seed 1 wins;
+    seed 1 already lost -> best surviving seed wins; a tie is mid-way
+    through its two legs -> that tie just isn't 'decided' yet, so neither
+    side counts as eliminated from it. Returns the crowned player_id, or
+    None if there was nothing to resolve."""
+    if not playoffs_started(league_id):
+        return None
+    if playoff_champion(league_id):
+        return None
 
+    fixtures = list_fixtures(league_id)
+    seeds = _seed_order(league_id)
+    eliminated = set()
+
+    for leg1, leg2 in ((QF_LEG1, QF_LEG2), (SF_LEG1, SF_LEG2)):
+        for tie in _tie_groups(fixtures, leg1, leg2):
+            winner = _tie_winner(tie, leg1, leg2, seeds)
+            if winner:
+                ids = {pid for f in tie for pid in (f["home_player_id"], f["away_player_id"])}
+                eliminated |= (ids - {winner})
+
+    survivors = [pid for pid in seeds if pid not in eliminated]
+    if not survivors:
+        return None
+    champion_id = min(survivors, key=lambda pid: seeds[pid])
+
+    get_client().table("leagues").update({
+        "status": "completed",
+        "winner_player_id": champion_id,
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", league_id).execute()
+    return champion_id
 
 def complete_league(league_id: str):
     """Archive the season after the playoff final has produced a champion."""
