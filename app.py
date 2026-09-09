@@ -397,6 +397,7 @@ def leg_deadline_passed(league, leg: int) -> bool:
     deadline_dt = datetime.combine(date.fromisoformat(raw), dtime(12, 0), tzinfo=IST)
     return datetime.now(IST) >= deadline_dt
 
+
 def playoff_deadline_passed(league) -> bool:
     """Same 12:00 PM IST cutoff rule as the league-stage deadlines,
     applied to the playoff deadline."""
@@ -411,7 +412,9 @@ def maybe_auto_resolve():
     """Runs on every page load. If a leg's deadline has passed and it
     still has unplayed fixtures, auto-resolves them (see auto_resolve_leg)
     and lets the admin know via a toast. Cheap no-op once everything's
-    already resolved, so it's safe to call unconditionally like this."""
+    already resolved, so it's safe to call unconditionally like this.
+    Also checks the playoff deadline: if it's passed and there's no
+    champion yet, crowns the best remaining seed automatically."""
     league = db.get_active_league()
     if not league:
         return
@@ -420,6 +423,14 @@ def maybe_auto_resolve():
             resolved = db.auto_resolve_leg(league["id"], leg)
             if resolved:
                 st.toast(f"⏰ Auto-resolved {resolved} overdue Leg {leg} fixture(s).", icon="🤖")
+
+    if db.playoffs_started(league["id"]) and playoff_deadline_passed(league):
+        champion_id = db.resolve_playoffs_by_deadline(league["id"])
+        if champion_id:
+            players = {p["id"]: p for p in db.list_players()}
+            winner = players.get(champion_id)
+            winner_name = f"{winner['ign']} ({winner['club_name']})" if winner else "A player"
+            st.toast(f"⏰ Playoff deadline passed — {winner_name} is crowned champion by seed.", icon="🏆")
 
 
 maybe_auto_resolve()
@@ -599,6 +610,24 @@ elif page_key == "playoffs":
             'the <strong>second leg</strong> at the home of the <strong>second</strong> team listed.</p>',
             unsafe_allow_html=True
         )
+
+        raw_playoff_deadline = league.get("playoff_deadline")
+        if raw_playoff_deadline:
+            playoff_deadline_date = date.fromisoformat(raw_playoff_deadline)
+            if playoff_deadline_passed(league) and not db.playoff_champion(league["id"]):
+                st.markdown(
+                    f'<p class="muted" style="text-align:center;">⏰ Playoff deadline was '
+                    f'<b>{playoff_deadline_date.strftime("%d %b %Y")}, 12:00 PM</b> — '
+                    f'unresolved ties were settled by seed.</p>',
+                    unsafe_allow_html=True,
+                )
+            elif not db.playoff_champion(league["id"]):
+                st.markdown(
+                    f'<p class="muted" style="text-align:center;">⏳ Playoff deadline: '
+                    f'<b>{playoff_deadline_date.strftime("%d %b %Y")}, 12:00 PM</b> — '
+                    f'unfinished ties auto-resolve by seed after this.</p>',
+                    unsafe_allow_html=True,
+                )
 
         def tie_data(tie, leg1_no, leg2_no):
             by_leg = {f["leg"]: f for f in tie}
@@ -1060,6 +1089,32 @@ elif page_key == "admin":
                         st.error(str(e))
         else:
             st.success("🏆 League stage complete — Top 8 playoffs are in progress. Knockout rounds advance automatically when each tie is finished.")
+
+            st.markdown('<p class="section-title" style="font-size: 1rem;">Playoff deadline</p>', unsafe_allow_html=True)
+            st.markdown(
+                '<p class="muted">If set, any ties still undecided once this passes are settled automatically: '
+                'the best remaining seed (by original top-8 seeding) is crowned champion, with no further '
+                'matches required.</p>',
+                unsafe_allow_html=True,
+            )
+            raw_po_deadline = active_league.get("playoff_deadline")
+            po_current = date.fromisoformat(raw_po_deadline) if raw_po_deadline else None
+            po_passed = playoff_deadline_passed(active_league)
+            if po_current:
+                po_status = "passed" if po_passed else "upcoming"
+                st.markdown(f'<p class="muted">Playoff deadline: <b>{po_current.strftime("%d %b %Y")}, 12:00 PM</b> ({po_status}).</p>', unsafe_allow_html=True)
+            else:
+                st.markdown('<p class="muted">No playoff deadline set.</p>', unsafe_allow_html=True)
+
+            new_po_date = st.date_input("Set / change playoff deadline", value=po_current or date.today(), key="playoff_deadline_admin_input")
+            po_col1, po_col2 = st.columns(2)
+            if po_col1.button("Update playoff deadline", key="update_playoff_deadline", use_container_width=True):
+                db.set_playoff_deadline(active_league["id"], new_po_date)
+                st.rerun()
+            if po_col2.button("Clear playoff deadline", key="clear_playoff_deadline", use_container_width=True, disabled=not po_current):
+                db.set_playoff_deadline(active_league["id"], None)
+                st.rerun()
+
             po = db.list_fixtures(active_league["id"])
             final = next((f for f in po if f["leg"] == db.FINAL_LEG), None)
             champion = db.playoff_champion(active_league["id"])
