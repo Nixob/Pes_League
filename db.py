@@ -178,6 +178,14 @@ def set_league_leg2_deadline(league_id: str, deadline):
         {"leg2_deadline": deadline.isoformat() if deadline else None}
     ).eq("id", league_id).execute()
 
+def set_playoff_deadline(league_id: str, deadline):
+    """Sets/clears the playoff deadline. deadline: a datetime.date, or None
+    to clear. Once this passes with no champion yet, resolve_playoffs_by_deadline
+    crowns the best remaining seed automatically — see that function."""
+    sb = get_client()
+    sb.table("leagues").update(
+        {"playoff_deadline": deadline.isoformat() if deadline else None}
+    ).eq("id", league_id).execute()
 
 def apply_forfeit(fixture_id: str, outcome: str):
     """Records a forfeit result. outcome is 'home' or 'away' for a 1-0
