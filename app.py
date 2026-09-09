@@ -397,6 +397,15 @@ def leg_deadline_passed(league, leg: int) -> bool:
     deadline_dt = datetime.combine(date.fromisoformat(raw), dtime(12, 0), tzinfo=IST)
     return datetime.now(IST) >= deadline_dt
 
+def playoff_deadline_passed(league) -> bool:
+    """Same 12:00 PM IST cutoff rule as the league-stage deadlines,
+    applied to the playoff deadline."""
+    raw = league.get("playoff_deadline")
+    if not raw:
+        return False
+    deadline_dt = datetime.combine(date.fromisoformat(raw), dtime(12, 0), tzinfo=IST)
+    return datetime.now(IST) >= deadline_dt
+
 
 def maybe_auto_resolve():
     """Runs on every page load. If a leg's deadline has passed and it
