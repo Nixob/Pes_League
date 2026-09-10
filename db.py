@@ -350,10 +350,24 @@ def _tie_groups(fixtures, leg1, leg2):
 
 
 def _tie_winner(tie, leg1, leg2, seed_order):
-    """Resolve a two-legged tie using aggregate score, then old-UCL away goals.
-    If both are level, the higher league seed advances as a deterministic
-    fallback because the current fixture schema has no ET/penalty fields."""
-    if len(tie) != 2 or not all(f["played"] for f in tie):
+    """Resolve a knockout tie. `tie` is a list of 1 or 2 played fixtures:
+    2 for a two-legged tie (aggregate score, then old-UCL away goals),
+    1 for a single-match tie (just that match's result). If everything's
+    level — aggregate + away goals for a two-legger, or a drawn single
+    match — the higher league seed advances as a deterministic fallback,
+    since the current fixture schema has no ET/penalty fields. Returns
+    None if the tie isn't fully played yet."""
+    if not tie or not all(f["played"] for f in tie):
+        return None
+
+    if len(tie) == 1:
+        f = tie[0]
+        h, a = f["home_player_id"], f["away_player_id"]
+        if f["home_score"] != f["away_score"]:
+            return h if f["home_score"] > f["away_score"] else a
+        return min((h, a), key=lambda pid: seed_order.get(pid, 999))
+
+    if len(tie) != 2:
         return None
 
     aggregate = {}
@@ -374,18 +388,25 @@ def _tie_winner(tie, leg1, leg2, seed_order):
     return min(ids, key=lambda pid: seed_order.get(pid, 999))
 
 
-def create_playoffs(league_id: str, size: int = 8) -> list[dict]:
+def create_playoffs(league_id: str, size: int = 8, format: str = "two_leg") -> list[dict]:
     """Create the knockout bracket for the top `size` league finishers.
     `size` must be 2, 4, or 8 — however many players the admin wants to
     qualify (e.g. pick 4 for an 8-player league so it isn't just the
-    whole table re-entering playoffs). The bracket seeds the usual way
-    (1 vs last, working inward) and starts at whichever round matches
-    that size: 8 starts at the quarter-finals, 4 skips straight to the
-    semi-finals, 2 skips straight to a single final. The chosen size is
-    stored on the league so every later round (advance_playoffs, seeding
-    for away-goals tie-breaks, etc.) knows how many seeds are in play."""
+    whole table re-entering playoffs). `format` is 'two_leg' (home &
+    away, aggregate/away-goals decide it — the original behaviour) or
+    'single' (one match per tie; a draw isn't a valid result, same rule
+    the final already used, since there's no ET/penalty field to record
+    a winner otherwise). The bracket seeds the usual way (1 vs last,
+    working inward) and starts at whichever round matches that size: 8
+    starts at the quarter-finals, 4 skips straight to the semi-finals, 2
+    skips straight to a single final (always one match regardless of
+    format — there's only one leg to play anyway). Both choices are
+    stored on the league so every later round knows how many seeds are
+    in play and whether to expect one leg or two."""
     if size not in (2, 4, 8):
         raise ValueError("Playoff size must be 2, 4, or 8.")
+    if format not in ("two_leg", "single"):
+        raise ValueError("Playoff format must be 'two_leg' or 'single'.")
     if playoffs_started(league_id):
         return []
     if not league_stage_complete(league_id):
@@ -400,23 +421,28 @@ def create_playoffs(league_id: str, size: int = 8) -> list[dict]:
 
     players = {p["id"]: p for p in list_players()}
     ids = [r["player_id"] for r in topN]
+    two_leg = (format == "two_leg")
+
+    def make_round(pairs, leg1, leg2):
+        out = []
+        for high, low in pairs:
+            out.append(_playoff_row(league_id, high, low, players, leg1))
+            if two_leg:
+                out.append(_playoff_row(league_id, low, high, players, leg2))
+        return out
 
     rows = []
     if size == 8:
         pairs = [(ids[0], ids[7]), (ids[3], ids[4]), (ids[1], ids[6]), (ids[2], ids[5])]
-        for high, low in pairs:
-            rows.append(_playoff_row(league_id, high, low, players, QF_LEG1))
-            rows.append(_playoff_row(league_id, low, high, players, QF_LEG2))
+        rows = make_round(pairs, QF_LEG1, QF_LEG2)
     elif size == 4:
         pairs = [(ids[0], ids[3]), (ids[1], ids[2])]
-        for high, low in pairs:
-            rows.append(_playoff_row(league_id, high, low, players, SF_LEG1))
-            rows.append(_playoff_row(league_id, low, high, players, SF_LEG2))
-    else:  # size == 2
+        rows = make_round(pairs, SF_LEG1, SF_LEG2)
+    else:  # size == 2 -- always a single match, same as the final always was
         rows.append(_playoff_row(league_id, ids[0], ids[1], players, FINAL_LEG))
 
     sb = get_client()
-    sb.table("leagues").update({"playoff_size": size}).eq("id", league_id).execute()
+    sb.table("leagues").update({"playoff_size": size, "playoff_format": format}).eq("id", league_id).execute()
     sb.table("fixtures").insert(rows).execute()
     return rows
 
@@ -430,6 +456,17 @@ def get_playoff_size(league_id: str) -> int:
     if res and res[0].get("playoff_size"):
         return res[0]["playoff_size"]
     return 8
+
+
+def get_playoff_format(league_id: str) -> str:
+    """'two_leg' or 'single'. Falls back to 'two_leg' for any league
+    created before this was configurable, since that was the only
+    format available back then."""
+    sb = get_client()
+    res = sb.table("leagues").select("playoff_format").eq("id", league_id).limit(1).execute().data
+    if res and res[0].get("playoff_format"):
+        return res[0]["playoff_format"]
+    return "two_leg"
 
 
 def _seed_order(league_id: str):
@@ -451,6 +488,7 @@ def advance_playoffs(league_id: str) -> bool:
         return False
     players = {p["id"]: p for p in list_players()}
     seeds = _seed_order(league_id)
+    two_leg = get_playoff_format(league_id) == "two_leg"
     advanced = False
 
     # Quarter-finals -> semi-finals, one SF pair at a time.
@@ -475,7 +513,8 @@ def advance_playoffs(league_id: str) -> bool:
     for a, b in sf_pairs:
         if a and b and frozenset([a, b]) not in existing_sf_pair_ids:
             new_sf_rows.append(_playoff_row(league_id, a, b, players, SF_LEG1))
-            new_sf_rows.append(_playoff_row(league_id, b, a, players, SF_LEG2))
+            if two_leg:
+                new_sf_rows.append(_playoff_row(league_id, b, a, players, SF_LEG2))
     if new_sf_rows:
         get_client().table("fixtures").insert(new_sf_rows).execute()
         advanced = True
@@ -483,10 +522,12 @@ def advance_playoffs(league_id: str) -> bool:
 
     # Semi-finals -> final (unchanged: the final can only ever be created once
     # both semi-final ties exist and are both decided, so there's no partial
-    # case to handle here the way there is for quarter-finals).
+    # case to handle here the way there is for quarter-finals). A tie is
+    # "both legs played" whether it's actually 2 legs (two_leg format) or
+    # just the 1 it has under single-match format.
     if not _round_exists(fixtures, (FINAL_LEG,)):
         groups = _tie_groups(fixtures, SF_LEG1, SF_LEG2)
-        if len(groups) == 2 and all(len(g) == 2 and all(f["played"] for f in g) for g in groups):
+        if len(groups) == 2 and all(all(f["played"] for f in g) for g in groups):
             winners = [_tie_winner(g, SF_LEG1, SF_LEG2, seeds) for g in groups]
             if all(winners):
                 get_client().table("fixtures").insert([
@@ -578,10 +619,18 @@ def next_fixture_for_player(league_id: str, player_id: str):
 
 
 def submit_result(fixture_id: str, home_score: int, away_score: int):
-    """Save a result. The playoff final must have a winner."""
+    """Save a result. The playoff final must have a winner, and so must
+    any other knockout round under single-match format (QF_LEG1/SF_LEG1
+    with no companion leg) — there's no ET/penalty field, so the entered
+    score has to be decisive."""
     fixture = get_fixture(fixture_id)
-    if fixture and fixture["leg"] == FINAL_LEG and home_score == away_score:
-        raise ValueError("The playoff final must have a winner (include the shootout winner in the recorded result).")
+    if fixture and home_score == away_score:
+        single_leg_knockout = fixture["leg"] == FINAL_LEG or (
+            fixture["leg"] in (QF_LEG1, SF_LEG1)
+            and get_playoff_format(fixture["league_id"]) == "single"
+        )
+        if single_leg_knockout:
+            raise ValueError("This is a single-match knockout tie and must have a winner (include the shootout winner in the recorded result).")
     sb = get_client()
     sb.table("fixtures").update({
         "played": True,
