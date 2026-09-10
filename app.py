@@ -330,7 +330,7 @@ def standings_rows(table):
     return [{
         "#": i + 1,
         "Player": f"{r['club_name']}<span class='club-sub'>{r['ign']}</span>",
-        "P": r["played"], "W": r["won"], "D": r["drawn"], "L": r["lost"],
+        "P": r["☑️played"], "W": r["won"], "D": r["drawn"], "L": r["lost"],
         "GF": r["gf"], "GA": r["ga"], "GD": r["gd"], "Pts": r["points"],
     } for i, r in enumerate(table)]
 
