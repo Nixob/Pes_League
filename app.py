@@ -404,7 +404,7 @@ def playoff_deadline_passed(league) -> bool:
     raw = league.get("playoff_deadline")
     if not raw:
         return False
-    deadline_dt = datetime.combine(date.fromisoformat(raw), dtime(12, 0), tzinfo=IST)
+    deadline_dt = datetime.combine(date.fromisoformat(raw), dtime(8, 0), tzinfo=IST)
     return datetime.now(IST) >= deadline_dt
 
 
