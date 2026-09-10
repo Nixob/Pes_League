@@ -374,37 +374,67 @@ def _tie_winner(tie, leg1, leg2, seed_order):
     return min(ids, key=lambda pid: seed_order.get(pid, 999))
 
 
-def create_playoffs(league_id: str) -> list[dict]:
-    """Create the top-8 quarter-final bracket: 1v8, 4v5, 2v7, 3v6."""
+def create_playoffs(league_id: str, size: int = 8) -> list[dict]:
+    """Create the knockout bracket for the top `size` league finishers.
+    `size` must be 2, 4, or 8 — however many players the admin wants to
+    qualify (e.g. pick 4 for an 8-player league so it isn't just the
+    whole table re-entering playoffs). The bracket seeds the usual way
+    (1 vs last, working inward) and starts at whichever round matches
+    that size: 8 starts at the quarter-finals, 4 skips straight to the
+    semi-finals, 2 skips straight to a single final. The chosen size is
+    stored on the league so every later round (advance_playoffs, seeding
+    for away-goals tie-breaks, etc.) knows how many seeds are in play."""
+    if size not in (2, 4, 8):
+        raise ValueError("Playoff size must be 2, 4, or 8.")
     if playoffs_started(league_id):
         return []
     if not league_stage_complete(league_id):
         raise ValueError("All league fixtures must be completed before playoffs can start.")
 
     table = get_standings(league_id)
-    if len(table) < 8:
-        raise ValueError("Playoffs need at least 8 league participants.")
-    top8 = table[:8]
-    if any(r["player_id"] is None for r in top8):
-        raise ValueError("All top-8 playoff teams must still have an active player record.")
+    if len(table) < size:
+        raise ValueError(f"Playoffs need at least {size} league participants.")
+    topN = table[:size]
+    if any(r["player_id"] is None for r in topN):
+        raise ValueError("All qualifying playoff teams must still have an active player record.")
 
     players = {p["id"]: p for p in list_players()}
-    pairs = [
-        (top8[0]["player_id"], top8[7]["player_id"]),
-        (top8[3]["player_id"], top8[4]["player_id"]),
-        (top8[1]["player_id"], top8[6]["player_id"]),
-        (top8[2]["player_id"], top8[5]["player_id"]),
-    ]
+    ids = [r["player_id"] for r in topN]
+
     rows = []
-    for high, low in pairs:
-        rows.append(_playoff_row(league_id, high, low, players, QF_LEG1))
-        rows.append(_playoff_row(league_id, low, high, players, QF_LEG2))
-    get_client().table("fixtures").insert(rows).execute()
+    if size == 8:
+        pairs = [(ids[0], ids[7]), (ids[3], ids[4]), (ids[1], ids[6]), (ids[2], ids[5])]
+        for high, low in pairs:
+            rows.append(_playoff_row(league_id, high, low, players, QF_LEG1))
+            rows.append(_playoff_row(league_id, low, high, players, QF_LEG2))
+    elif size == 4:
+        pairs = [(ids[0], ids[3]), (ids[1], ids[2])]
+        for high, low in pairs:
+            rows.append(_playoff_row(league_id, high, low, players, SF_LEG1))
+            rows.append(_playoff_row(league_id, low, high, players, SF_LEG2))
+    else:  # size == 2
+        rows.append(_playoff_row(league_id, ids[0], ids[1], players, FINAL_LEG))
+
+    sb = get_client()
+    sb.table("leagues").update({"playoff_size": size}).eq("id", league_id).execute()
+    sb.table("fixtures").insert(rows).execute()
     return rows
 
 
+def get_playoff_size(league_id: str) -> int:
+    """How many players qualify for this league's playoffs. Falls back to
+    8 for any league created before this was configurable, since that was
+    the only size available back then."""
+    sb = get_client()
+    res = sb.table("leagues").select("playoff_size").eq("id", league_id).limit(1).execute().data
+    if res and res[0].get("playoff_size"):
+        return res[0]["playoff_size"]
+    return 8
+
+
 def _seed_order(league_id: str):
-    return {r["player_id"]: i + 1 for i, r in enumerate(get_standings(league_id)[:8])}
+    size = get_playoff_size(league_id)
+    return {r["player_id"]: i + 1 for i, r in enumerate(get_standings(league_id)[:size])}
 
 
 def _round_exists(fixtures, legs):
