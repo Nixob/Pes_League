@@ -808,7 +808,7 @@ elif page_key == "fixtures":
                 elif leg_closed:
                     st.markdown('<p class="muted">Leg closed — this will be auto-resolved shortly, or fixed by the admin.</p>', unsafe_allow_html=True)
                 else:
-                    if render_score_entry(f["id"], "fx", "Home", "Away", "☑️ Played"):
+                    if render_score_entry(f["id"], "fx", "Home", "Away", "Update score ☑️"):
                         st.toast("Result saved")
 
 
