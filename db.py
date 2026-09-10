@@ -178,14 +178,16 @@ def set_league_leg2_deadline(league_id: str, deadline):
         {"leg2_deadline": deadline.isoformat() if deadline else None}
     ).eq("id", league_id).execute()
 
-def set_playoff_deadline(league_id: str, deadline):
-    """Sets/clears the playoff deadline. deadline: a datetime.date, or None
-    to clear. Once this passes with no champion yet, resolve_playoffs_by_deadline
-    crowns the best remaining seed automatically — see that function."""
+
+def set_round_deadline(league_id: str, round_key: str, deadline):
+    """Sets/clears the deadline for one knockout round. round_key is 'qf',
+    'sf', or 'final'. deadline: a datetime.date, or None to clear."""
+    column = {"qf": "qf_deadline", "sf": "sf_deadline", "final": "final_deadline"}[round_key]
     sb = get_client()
     sb.table("leagues").update(
-        {"playoff_deadline": deadline.isoformat() if deadline else None}
+        {column: deadline.isoformat() if deadline else None}
     ).eq("id", league_id).execute()
+
 
 def apply_forfeit(fixture_id: str, outcome: str):
     """Records a forfeit result. outcome is 'home' or 'away' for a 1-0
@@ -205,6 +207,23 @@ def apply_forfeit(fixture_id: str, outcome: str):
         "forfeit": True,
         "played_at": datetime.now(timezone.utc).isoformat(),
     }).eq("id", fixture_id).execute()
+
+
+def forfeit_tie_winner(tie: list[dict], winner_id: str):
+    """Admin override for an overdue knockout tie (or the single-match
+    final, passed as a one-item list): forfeits every leg in `tie` that
+    hasn't been played for real yet, crediting a clean win to whichever
+    side is `winner_id` on that leg. Any leg already played for real is
+    left untouched. Reuses the existing forfeit machinery (apply_forfeit)
+    so the result plugs straight into the normal aggregate/away-goals
+    winner logic, and can be corrected afterward with the same Undo
+    control used everywhere else. Safe to call on a tie that's already
+    fully decided -- it's then a no-op, since nothing is left unplayed."""
+    for f in tie:
+        if f["played"]:
+            continue
+        outcome = "home" if f["home_player_id"] == winner_id else "away"
+        apply_forfeit(f["id"], outcome)
 
 
 def auto_resolve_leg(league_id: str, leg: int) -> int:
@@ -468,44 +487,7 @@ def playoff_champion(league_id: str):
     if f["away_score"] > f["home_score"]:
         return f["away_player_id"]
     return None
-def resolve_playoffs_by_deadline(league_id: str):
-    """Called once a playoff deadline has passed. If the final has already
-    produced a champion through normal play, this is a no-op. Otherwise it
-    works out who's still alive among the original top-8 seeds — anyone
-    who hasn't lost a *decided* quarter-final or semi-final tie — and
-    crowns the best remaining seed champion directly, with no further
-    matches required. Covers every case: nobody's played -> seed 1 wins;
-    seed 1 already lost -> best surviving seed wins; a tie is mid-way
-    through its two legs -> that tie just isn't 'decided' yet, so neither
-    side counts as eliminated from it. Returns the crowned player_id, or
-    None if there was nothing to resolve."""
-    if not playoffs_started(league_id):
-        return None
-    if playoff_champion(league_id):
-        return None
 
-    fixtures = list_fixtures(league_id)
-    seeds = _seed_order(league_id)
-    eliminated = set()
-
-    for leg1, leg2 in ((QF_LEG1, QF_LEG2), (SF_LEG1, SF_LEG2)):
-        for tie in _tie_groups(fixtures, leg1, leg2):
-            winner = _tie_winner(tie, leg1, leg2, seeds)
-            if winner:
-                ids = {pid for f in tie for pid in (f["home_player_id"], f["away_player_id"])}
-                eliminated |= (ids - {winner})
-
-    survivors = [pid for pid in seeds if pid not in eliminated]
-    if not survivors:
-        return None
-    champion_id = min(survivors, key=lambda pid: seeds[pid])
-
-    get_client().table("leagues").update({
-        "status": "completed",
-        "winner_player_id": champion_id,
-        "completed_at": datetime.now(timezone.utc).isoformat(),
-    }).eq("id", league_id).execute()
-    return champion_id
 
 def complete_league(league_id: str):
     """Archive the season after the playoff final has produced a champion."""
