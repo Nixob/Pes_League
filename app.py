@@ -351,7 +351,7 @@ def render_undo_control(fixture_id: str, key_prefix: str) -> bool:
         if c2.button("Cancel", key=f"{key_prefix}_undo_no_{fixture_id}", use_container_width=True):
             st.session_state[confirm_key] = False
     else:
-        if c2.button("Undo", key=f"{key_prefix}_undo_{fixture_id}", use_container_width=True):
+        if c2.button("↩️ Undo", key=f"{key_prefix}_undo_{fixture_id}", use_container_width=True):
             st.session_state[confirm_key] = True
     return False
 
@@ -795,7 +795,7 @@ elif page_key == "fixtures":
                     unsafe_allow_html=True,
                 )
                 if f["played"]:
-                    st.markdown(f":green[**{f['home_score']} – {f['away_score']}**]")
+                    st.markdown(f"☑️ :green[**{f['home_score']} – {f['away_score']}**]")
                     if locked:
                         reason = "Leg closed" if leg_closed else "Playoffs have started"
                         st.markdown(f'<p class="muted">{reason} — only the admin can change this now.</p>', unsafe_allow_html=True)
@@ -808,7 +808,7 @@ elif page_key == "fixtures":
                 elif leg_closed:
                     st.markdown('<p class="muted">Leg closed — this will be auto-resolved shortly, or fixed by the admin.</p>', unsafe_allow_html=True)
                 else:
-                    if render_score_entry(f["id"], "fx", "Home", "Away", "Played"):
+                    if render_score_entry(f["id"], "fx", "Home", "Away", "☑️ Played"):
                         st.toast("Result saved")
 
 
