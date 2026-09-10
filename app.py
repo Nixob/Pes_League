@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 IST = ZoneInfo("Asia/Kolkata")
 
-st.set_page_config(page_title="PES with the Bois", page_icon="🟣", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="PES with the Bois", layout="wide", initial_sidebar_state="collapsed")
 
 PAGE_LABELS = {
     "home": "Home",
@@ -17,17 +17,6 @@ PAGE_LABELS = {
     "rules": "Rules",
     "admin": "Admin",
 }
-
-PAGE_ICONS = {
-    "fixtures": "⚽",
-    "table": "🏆",
-    "playoffs": "🥇",
-    "history": "📜",
-    "register": "➕",
-    "rules": "📋",
-    "admin": "🔐",
-}
-
 
 def player_label(p):
     return f"{p['ign']}  ({p['club_name']})"
@@ -204,10 +193,6 @@ table.league-table tr.playoff-row td:first-child {
 .bracket-team.winner {
     font-weight: 700;
     color: #4ade80;
-}
-.bracket-team.winner span::after {
-    content: ' 🏆';
-    font-size: 0.6rem;
 }
 .bracket-agg-mini {
     border-top: 1px solid rgba(125,125,132,0.3);
@@ -422,7 +407,7 @@ def maybe_auto_resolve():
         if leg_deadline_passed(league, leg):
             resolved = db.auto_resolve_leg(league["id"], leg)
             if resolved:
-                st.toast(f"⏰ Auto-resolved {resolved} overdue Leg {leg} fixture(s).", icon="🤖")
+                st.toast(f"Auto-resolved {resolved} overdue Leg {leg} fixture(s).")
 
     if db.playoffs_started(league["id"]) and playoff_deadline_passed(league):
         champion_id = db.resolve_playoffs_by_deadline(league["id"])
@@ -430,10 +415,307 @@ def maybe_auto_resolve():
             players = {p["id"]: p for p in db.list_players()}
             winner = players.get(champion_id)
             winner_name = f"{winner['ign']} ({winner['club_name']})" if winner else "A player"
-            st.toast(f"⏰ Playoff deadline passed — {winner_name} is crowned champion by seed.", icon="🏆")
+            st.toast(f"Playoff deadline passed — {winner_name} is crowned champion by seed.")
 
 
 maybe_auto_resolve()
+
+
+def render_playoff_bracket(league):
+    """Renders the knockout bracket visual and the QF/SF/Final match-by-
+    match tabs for the given league. Shared by the live Playoffs page
+    (editable while the league is still active -- every editor inside is
+    gated on league.get('status') == 'active') and by History, which
+    calls this read-only for each completed league so its bracket stays
+    viewable after a new league starts."""
+    if league.get("status") == "active":
+        db.advance_playoffs(league["id"])
+
+    fixtures = db.list_fixtures(league["id"])
+    qfs = [f for f in fixtures if f["leg"] in (db.QF_LEG1, db.QF_LEG2)]
+    sfs = [f for f in fixtures if f["leg"] in (db.SF_LEG1, db.SF_LEG2)]
+    final = [f for f in fixtures if f["leg"] == db.FINAL_LEG]
+
+    st.markdown('<p class="muted" style="text-align:center;">Top 8 knockout • Two-legged ties</p>', unsafe_allow_html=True)
+
+    # Home/away clarification legend
+    st.markdown(
+        '<p class="muted" style="text-align:center; font-size:0.85rem;">'
+        'In two‑legged ties, the <strong>first leg</strong> is at the home of the <strong>first</strong> team listed; '
+        'the <strong>second leg</strong> at the home of the <strong>second</strong> team listed.</p>',
+        unsafe_allow_html=True
+    )
+
+    raw_playoff_deadline = league.get("playoff_deadline")
+    if raw_playoff_deadline:
+        playoff_deadline_date = date.fromisoformat(raw_playoff_deadline)
+        if playoff_deadline_passed(league) and not db.playoff_champion(league["id"]):
+            st.markdown(
+                f'<p class="muted" style="text-align:center;">Playoff deadline was '
+                f'<b>{playoff_deadline_date.strftime("%d %b %Y")}, 7:30 AM</b> — '
+                f'unresolved ties were settled by seed.</p>',
+                unsafe_allow_html=True,
+            )
+        elif not db.playoff_champion(league["id"]):
+            st.markdown(
+                f'<p class="muted" style="text-align:center;">Playoff deadline: '
+                f'<b>{playoff_deadline_date.strftime("%d %b %Y")}, 7:30 AM</b> — '
+                f'unfinished ties auto-resolve by seed after this.</p>',
+                unsafe_allow_html=True,
+            )
+
+    def tie_data(tie, leg1_no, leg2_no):
+        by_leg = {f["leg"]: f for f in tie}
+        if leg1_no not in by_leg or leg2_no not in by_leg:
+            return None
+        f1, f2 = by_leg[leg1_no], by_leg[leg2_no]
+        a, b = f1["home_player_id"], f1["away_player_id"]
+        agg = {a: 0, b: 0}
+        away = {a: 0, b: 0}
+        for f in (f1, f2):
+            if f["played"]:
+                agg[f["home_player_id"]] += f["home_score"]
+                agg[f["away_player_id"]] += f["away_score"]
+                away[f["away_player_id"]] += f["away_score"]
+        winner = None
+        reason = None
+        if all(f["played"] for f in (f1, f2)):
+            if agg[a] != agg[b]:
+                winner, reason = (a if agg[a] > agg[b] else b), "aggregate"
+            elif away[a] != away[b]:
+                winner, reason = (a if away[a] > away[b] else b), "away goals"
+            else:
+                seeds = {r["player_id"]: i + 1 for i, r in enumerate(db.get_standings(league["id"])[:8])}
+                winner, reason = min((a, b), key=lambda pid: seeds.get(pid, 99)), "higher league seed"
+        return f1, f2, a, b, agg, away, winner, reason
+
+    def grouped_ties(fixtures, leg1_no, leg2_no):
+        """Group the two legs of each knockout tie by the two player IDs.
+        Always returns groups in deterministic order, based on the fixture
+        creation order supplied by the database."""
+        groups = {}
+        order = []
+        for f in fixtures:
+            if f["leg"] not in (leg1_no, leg2_no):
+                continue
+            key = tuple(sorted((f["home_player_id"], f["away_player_id"])))
+            if key not in groups:
+                groups[key] = []
+                order.append(key)
+            groups[key].append(f)
+        return [groups[k] for k in order]
+
+    def tie_label(tie, leg1_no, leg2_no):
+        """Returns (home_ign, away_ign, agg_str, winner_id, reason,
+        home_id, away_id). The two *_id fields are what winner_id should
+        actually be compared against — home_ign/away_ign are just display
+        strings, never player ids."""
+        data = tie_data(tie, leg1_no, leg2_no)
+        if not data:
+            return ("TBD", "TBD", "–", None, None, None, None)
+        f1, f2, a, b, agg, away, winner, reason = data
+        return (
+            f1["home_ign"], f1["away_ign"],
+            f'{agg[a]} – {agg[b]}' if any(f["played"] for f in (f1, f2)) else "–",
+            winner, reason, a, b,
+        )
+
+    qf_groups = grouped_ties(qfs, db.QF_LEG1, db.QF_LEG2)
+    sf_groups = grouped_ties(sfs, db.SF_LEG1, db.SF_LEG2)
+
+    # QF ties must keep a STABLE label regardless of what order the DB
+    # happens to return fixtures in (that order can shift after any
+    # update, e.g. saving a score) — so label by seed pairing instead
+    # of list position: 1v8 -> QF1, 4v5 -> QF2, 2v7 -> QF3, 3v6 -> QF4.
+    _seeds_for_qf = {r["player_id"]: i + 1 for i, r in enumerate(db.get_standings(league["id"])[:8])}
+    _QF_SLOTS = {frozenset({1, 8}): 1, frozenset({4, 5}): 2, frozenset({2, 7}): 3, frozenset({3, 6}): 4}
+
+    def _qf_slot(group):
+        pair = frozenset({_seeds_for_qf.get(group[0]["home_player_id"]), _seeds_for_qf.get(group[0]["away_player_id"])})
+        return _QF_SLOTS.get(pair, 99)
+
+    qf_groups = sorted(qf_groups, key=_qf_slot)
+
+    if qf_groups:
+        qf_cards = []
+        for i, tie in enumerate(qf_groups, 1):
+            n1, n2, agg, winner, reason, home_id, away_id = tie_label(tie, db.QF_LEG1, db.QF_LEG2)
+            qf_cards.append((i, n1, n2, agg, winner, home_id, away_id))
+        # Build bracket grid items
+        left_qf1 = qf_cards[0] if len(qf_cards) > 0 else None
+        left_qf2 = qf_cards[1] if len(qf_cards) > 1 else None
+        right_qf1 = qf_cards[2] if len(qf_cards) > 2 else None
+        right_qf2 = qf_cards[3] if len(qf_cards) > 3 else None
+
+        # SF and final info. Semi-final ties are now created independently
+        # as each half of the bracket finishes (see db.advance_playoffs),
+        # so which one lands in the fixtures table first is no longer
+        # reliable — sf_groups[0] is NOT always "the QF1/QF2 semi". Each
+        # group is classified by the actual seed of a participant instead,
+        # so the bracket visual and the labels below always match reality
+        # regardless of which half finished first.
+        seeds = _seeds_for_qf
+
+        def sf_group_side(group):
+            """'A' = fed by QF1+QF2 (seeds 1/8/4/5), 'B' = fed by QF3+QF4 (seeds 2/7/3/6)."""
+            seed = seeds.get(group[0]["home_player_id"])
+            return 'A' if seed in (1, 4, 5, 8) else 'B'
+
+        sf1 = next((g for g in sf_groups if sf_group_side(g) == 'A'), None)
+        sf2 = next((g for g in sf_groups if sf_group_side(g) == 'B'), None)
+        final_match = final[0] if final else None
+
+        def match_html(card, round_label, winner_class=''):
+            if not card:
+                return f'<div class="bracket-match bracket-pending"><div class="bracket-round">{round_label}</div><div class="bracket-team"><span>—</span></div><div class="bracket-team"><span>—</span></div></div>'
+            i, n1, n2, agg, winner, home_id, away_id = card
+            # NOTE: compare winner (a player id) against home_id/away_id —
+            # never against n1/n2, which are just display names.
+            w1 = ' winner' if winner and winner == home_id else ''
+            w2 = ' winner' if winner and winner == away_id else ''
+            return f'''<div class="bracket-match {winner_class}">
+                <div class="bracket-round">{round_label}</div>
+                <div class="bracket-team{w1}"><span>{n1}</span></div>
+                <div class="bracket-team{w2}"><span>{n2}</span></div>
+                <div class="bracket-agg-mini">Agg {agg}</div>
+            </div>'''
+
+        # Build SF cards
+        if sf1:
+            n1, n2, agg, winner, reason, _, _ = tie_label(sf1, db.SF_LEG1, db.SF_LEG2)
+            sf1_html = f'''<div class="bracket-match"><div class="bracket-round">SF 1</div>
+                <div class="bracket-team{' winner' if winner and winner==sf1[0]['home_player_id'] else ''}"><span>{n1}</span></div>
+                <div class="bracket-team{' winner' if winner and winner==sf1[0]['away_player_id'] else ''}"><span>{n2}</span></div>
+                <div class="bracket-agg-mini">Agg {agg}</div></div>'''
+        else:
+            sf1_html = '<div class="bracket-match bracket-pending"><div class="bracket-round">SF 1</div><div class="bracket-team"><span>Winner QF1</span></div><div class="bracket-team"><span>Winner QF2</span></div></div>'
+
+        if sf2:
+            n1, n2, agg, winner, reason, _, _ = tie_label(sf2, db.SF_LEG1, db.SF_LEG2)
+            sf2_html = f'''<div class="bracket-match"><div class="bracket-round">SF 2</div>
+                <div class="bracket-team{' winner' if winner and winner==sf2[0]['home_player_id'] else ''}"><span>{n1}</span></div>
+                <div class="bracket-team{' winner' if winner and winner==sf2[0]['away_player_id'] else ''}"><span>{n2}</span></div>
+                <div class="bracket-agg-mini">Agg {agg}</div></div>'''
+        else:
+            sf2_html = '<div class="bracket-match bracket-pending"><div class="bracket-round">SF 2</div><div class="bracket-team"><span>Winner QF3</span></div><div class="bracket-team"><span>Winner QF4</span></div></div>'
+
+        # Final
+        if final_match:
+            final_html = f'''<div class="bracket-match final"><div class="bracket-round">FINAL</div>
+                <div class="bracket-team"><span>{final_match['home_ign']}</span></div>
+                <div class="bracket-team"><span>{final_match['away_ign']}</span></div>
+                <div class="bracket-final-score">{final_match['home_score']} – {final_match['away_score']}</div></div>'''
+        else:
+            final_html = '<div class="bracket-match final bracket-pending"><div class="bracket-round">FINAL</div><div class="bracket-team"><span>Winner SF1</span></div><div class="bracket-team"><span>Winner SF2</span></div><div class="bracket-final-score">FINAL AWAITS</div></div>'
+
+        # Build the 5-column grid with explicit row/column placement
+        # We'll use a 5-column grid with 3 rows: row1 top, row2 middle, row3 bottom
+        # col1: QF1 (row1), QF2 (row3)
+        # col2: SF1 (row2)
+        # col3: Final (row2)
+        # col4: SF2 (row2)
+        # col5: QF3 (row1), QF4 (row3)
+        # We'll put each match in a div with grid-column and grid-row styles
+
+        visual = f'''
+        <div class="bracket-wrap">
+            <div class="bracket-board" style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr 1fr; grid-template-rows:auto auto auto; gap:20px 8px; min-width:640px; padding:0.5rem; justify-items:center; align-items:center;">
+                <!-- Row 1: QF1 (col1), QF3 (col5) -->
+                <div style="grid-column:1; grid-row:1; width:100%;">{match_html(left_qf1, 'QF 1')}</div>
+                <div style="grid-column:5; grid-row:1; width:100%;">{match_html(right_qf1, 'QF 3')}</div>
+                <!-- Row 2: SF1 (col2), Final (col3), SF2 (col4) -->
+                <div style="grid-column:2; grid-row:2; width:100%;">{sf1_html}</div>
+                <div style="grid-column:3; grid-row:2; width:100%;">{final_html}</div>
+                <div style="grid-column:4; grid-row:2; width:100%;">{sf2_html}</div>
+                <!-- Row 3: QF2 (col1), QF4 (col5) -->
+                <div style="grid-column:1; grid-row:3; width:100%;">{match_html(left_qf2, 'QF 2')}</div>
+                <div style="grid-column:5; grid-row:3; width:100%;">{match_html(right_qf2, 'QF 4')}</div>
+            </div>
+        </div>
+        '''
+        st.markdown(visual, unsafe_allow_html=True)
+
+        st.markdown('<div class="knockout-title">Match results</div>', unsafe_allow_html=True)
+
+        def render_tie_editor(tie, title):
+            is_qf = title.startswith("QF")
+            leg1_no = db.QF_LEG1 if is_qf else db.SF_LEG1
+            leg2_no = db.QF_LEG2 if is_qf else db.SF_LEG2
+            data = tie_data(tie, leg1_no, leg2_no)
+            if not data:
+                return
+            f1, f2, a, b, agg, away, winner, reason = data
+            # A tie is "locked" once ITS OWN winner has actually been placed
+            # into the next round — not just whenever any next-round fixture
+            # exists. Semi-finals are now created one pair at a time, so
+            # e.g. QF3/QF4 must stay editable even after QF1/QF2 have
+            # already advanced into SF1.
+            next_round_fixtures = sfs if is_qf else final
+            round_has_next = db.tie_has_advanced(winner, next_round_fixtures)
+
+            with st.container(border=True):
+                st.markdown(f"**{title}** — {f1['home_ign']} vs {f1['away_ign']}")
+                for label, f in (("Leg 1", f1), ("Leg 2", f2)):
+                    home_label = f"{f['home_ign']} (H)"
+                    away_label = f"{f['away_ign']} (A)"
+                    if f["played"]:
+                        st.markdown(f"**{label}:** {home_label} vs {away_label} — :green[**{f['home_score']} – {f['away_score']}**]")
+                        if not round_has_next and league.get("status") == "active":
+                            if render_undo_control(f["id"], "po"):
+                                st.rerun()
+                        elif round_has_next:
+                            st.caption("Advanced to the next round")
+                    elif league.get("status") == "active":
+                        if render_score_entry(f["id"], "po", f"{label} {home_label}", f"{label} {away_label}", f"Save {label}"):
+                            st.rerun()
+                st.caption(f"Aggregate: {agg[a]} – {agg[b]}  •  Away goals: {away[a]} – {away[b]}")
+                if winner:
+                    win_name = f1["home_ign"] if winner == a else f1["away_ign"]
+                    st.success(f"{win_name} advances ({reason}).")
+
+        qf_all_done = bool(qf_groups) and all(tie_data(t, db.QF_LEG1, db.QF_LEG2)[6] for t in qf_groups)
+        sf_all_done = bool(sf_groups) and all(tie_data(t, db.SF_LEG1, db.SF_LEG2)[6] for t in sf_groups)
+
+        tab_labels = [
+            f"Quarter Final{' (complete)' if qf_all_done else ''}",
+            f"Semi Final{' (complete)' if sf_all_done else ''}" if sf_groups else "Semi Final (locked)",
+            "Final" if final else "Final (locked)",
+        ]
+        qf_tab, sf_tab, final_tab = st.tabs(tab_labels)
+
+        with qf_tab:
+            for i, tie in enumerate(qf_groups, 1):
+                render_tie_editor(tie, f"QF {i}")
+
+        with sf_tab:
+            if not sf_groups:
+                st.markdown('<p class="muted">Semi-finals unlock as soon as both feeder quarter-finals for a half of the bracket are decided.</p>', unsafe_allow_html=True)
+            else:
+                for i, tie in ((1, sf1), (2, sf2)):
+                    if tie:
+                        render_tie_editor(tie, f"SF {i}")
+
+        with final_tab:
+            if not final:
+                st.markdown('<p class="muted">The final unlocks once both semi-finals are decided.</p>', unsafe_allow_html=True)
+            else:
+                f = final[0]
+                with st.container(border=True):
+                    st.markdown(f'**{f["home_ign"]}** vs **{f["away_ign"]}**')
+                    if f["played"]:
+                        st.markdown(f':green[**{f["home_score"]} – {f["away_score"]}**]')
+                        if league.get("status") == "active":
+                            if render_undo_control(f["id"], "po"):
+                                st.rerun()
+                        champion = db.playoff_champion(league["id"])
+                        if champion:
+                            winner_name = f["home_ign"] if champion == f["home_player_id"] else f["away_ign"]
+                            st.success(f"Champion: {winner_name}")
+                    elif league.get("status") == "active":
+                        if render_score_entry(f["id"], "po", "Final H", "Final A", "Save Final"):
+                            st.rerun()
+    else:
+        st.info("The top-8 playoff bracket will appear here once the league stage is completed.")
 
 
 # ---------------------------------------------------------------------- Home --
@@ -447,7 +729,7 @@ if page_key == "home":
             with cols[i]:
                 with st.container(border=True):
                     st.button(
-                        f"{PAGE_ICONS[key]}  {PAGE_LABELS[key]}", key=f"tile_{key}",
+                        PAGE_LABELS[key], key=f"tile_{key}",
                         use_container_width=True, on_click=go_to, args=(key,),
                     )
 
@@ -471,24 +753,24 @@ elif page_key == "fixtures":
             deadline_date = date.fromisoformat(raw_deadline)
             if leg1_closed:
                 st.markdown(
-                    f'<p class="muted">⏰ Leg 1 deadline was <b>{deadline_date.strftime("%d %b %Y")}, 7:30 AM</b> — '
+                    f'<p class="muted">Leg 1 deadline was <b>{deadline_date.strftime("%d %b %Y")}, 7:30 AM</b> — '
                     f'Leg 1 is now closed, results can only be corrected by the admin.</p>',
                     unsafe_allow_html=True,
                 )
             else:
-                st.markdown(f'<p class="muted">⏳ Leg 1 deadline: <b>{deadline_date.strftime("%d %b %Y")}, 7:30 AM</b></p>', unsafe_allow_html=True)
+                st.markdown(f'<p class="muted">Leg 1 deadline: <b>{deadline_date.strftime("%d %b %Y")}, 7:30 AM</b></p>', unsafe_allow_html=True)
 
         raw_leg2_deadline = league.get("leg2_deadline")
         if raw_leg2_deadline:
             leg2_deadline_date = date.fromisoformat(raw_leg2_deadline)
             if leg2_closed:
                 st.markdown(
-                    f'<p class="muted">⏰ Leg 2 deadline was <b>{leg2_deadline_date.strftime("%d %b %Y")}, 7:30 AM</b> — '
+                    f'<p class="muted">Leg 2 deadline was <b>{leg2_deadline_date.strftime("%d %b %Y")}, 7:30 AM</b> — '
                     f'Leg 2 is now closed, results can only be corrected by the admin.</p>',
                     unsafe_allow_html=True,
                 )
             else:
-                st.markdown(f'<p class="muted">⏳ Leg 2 deadline: <b>{leg2_deadline_date.strftime("%d %b %Y")}, 7:30 AM</b></p>', unsafe_allow_html=True)
+                st.markdown(f'<p class="muted">Leg 2 deadline: <b>{leg2_deadline_date.strftime("%d %b %Y")}, 7:30 AM</b></p>', unsafe_allow_html=True)
 
         approved_players = [p for p in db.list_players(status="approved") if p["active"]]
         names = {p["id"]: player_label(p) for p in approved_players}
@@ -499,7 +781,7 @@ elif page_key == "fixtures":
 
         if not league["leg2_unlocked"]:
             st.markdown(
-                '<p class="muted">🔒 Leg 2 fixtures are locked until the admin opens them '
+                '<p class="muted">Leg 2 fixtures are locked until the admin opens them '
                 '(once every Leg 1 match is played).</p>',
                 unsafe_allow_html=True,
             )
@@ -535,9 +817,9 @@ elif page_key == "fixtures":
             with st.container(border=True):
                 leg_tag = f"Leg {f['leg']}"
                 if f["played"] and f.get("forfeit"):
-                    leg_tag += "  ·  🚩 Forfeit"
+                    leg_tag += "  ·  Forfeit"
                 elif not f["played"] and leg_closed:
-                    leg_tag += "  ·  ⏰ Overdue"
+                    leg_tag += "  ·  Overdue"
                 st.markdown(
                     f"**{f['home_ign']}** _{f['home_club_name']}_ &nbsp;vs&nbsp; "
                     f"**{f['away_ign']}** _{f['away_club_name']}_"
@@ -545,21 +827,21 @@ elif page_key == "fixtures":
                     unsafe_allow_html=True,
                 )
                 if f["played"]:
-                    st.markdown(f":green[✅ **{f['home_score']} – {f['away_score']}**]")
+                    st.markdown(f":green[**{f['home_score']} – {f['away_score']}**]")
                     if locked:
                         reason = "Leg closed" if leg_closed else "Playoffs have started"
-                        st.markdown(f'<p class="muted">🔒 {reason} — only the admin can change this now.</p>', unsafe_allow_html=True)
+                        st.markdown(f'<p class="muted">{reason} — only the admin can change this now.</p>', unsafe_allow_html=True)
                     elif render_undo_control(f["id"], "fx"):
-                        st.toast("Result undone.", icon="↩️")
+                        st.toast("Result undone.")
                 elif f["leg"] == 2 and not leg2_unlocked:
-                    st.markdown('<p class="muted">🔒 Locked until Leg 1 is complete.</p>', unsafe_allow_html=True)
+                    st.markdown('<p class="muted">Locked until Leg 1 is complete.</p>', unsafe_allow_html=True)
                 elif playoffs_locked:
-                    st.markdown('<p class="muted">🔒 Playoffs have started — league results are now locked. Contact the admin for corrections.</p>', unsafe_allow_html=True)
+                    st.markdown('<p class="muted">Playoffs have started — league results are now locked. Contact the admin for corrections.</p>', unsafe_allow_html=True)
                 elif leg_closed:
-                    st.markdown('<p class="muted">🔒 Leg closed — this will be auto-resolved shortly, or fixed by the admin.</p>', unsafe_allow_html=True)
+                    st.markdown('<p class="muted">Leg closed — this will be auto-resolved shortly, or fixed by the admin.</p>', unsafe_allow_html=True)
                 else:
-                    if render_score_entry(f["id"], "fx", "Home", "Away", "✅ Played"):
-                        st.toast("Result saved ✅", icon="✅")
+                    if render_score_entry(f["id"], "fx", "Home", "Away", "Played"):
+                        st.toast("Result saved")
 
 
         playoffs_locked = db.playoffs_started(league["id"])
@@ -582,7 +864,6 @@ elif page_key == "table":
         render_table(standings_rows(table), top8_marker=True)
 
 
-# ------------------------------------------------------------------ Playoffs --
 elif page_key == "playoffs":
     league = db.get_active_league()
     if not league:
@@ -592,295 +873,8 @@ elif page_key == "playoffs":
     if not league:
         st.info("No league or playoff bracket exists yet.")
     else:
-        if league.get("status") == "active":
-            db.advance_playoffs(league["id"])
-
-        fixtures = db.list_fixtures(league["id"])
-        qfs = [f for f in fixtures if f["leg"] in (db.QF_LEG1, db.QF_LEG2)]
-        sfs = [f for f in fixtures if f["leg"] in (db.SF_LEG1, db.SF_LEG2)]
-        final = [f for f in fixtures if f["leg"] == db.FINAL_LEG]
-
         st.markdown(f'<p class="muted" style="text-align:center;">{league["name"]}</p>', unsafe_allow_html=True)
-        st.markdown('<p class="muted" style="text-align:center;">Top 8 knockout • Two-legged ties</p>', unsafe_allow_html=True)
-
-        # Home/away clarification legend
-        st.markdown(
-            '<p class="muted" style="text-align:center; font-size:0.85rem;">'
-            '🏠 In two‑legged ties, the <strong>first leg</strong> is at the home of the <strong>first</strong> team listed; '
-            'the <strong>second leg</strong> at the home of the <strong>second</strong> team listed.</p>',
-            unsafe_allow_html=True
-        )
-
-        raw_playoff_deadline = league.get("playoff_deadline")
-        if raw_playoff_deadline:
-            playoff_deadline_date = date.fromisoformat(raw_playoff_deadline)
-            if playoff_deadline_passed(league) and not db.playoff_champion(league["id"]):
-                st.markdown(
-                    f'<p class="muted" style="text-align:center;">⏰ Playoff deadline was '
-                    f'<b>{playoff_deadline_date.strftime("%d %b %Y")}, 7:30 AM</b> — '
-                    f'unresolved ties were settled by seed.</p>',
-                    unsafe_allow_html=True,
-                )
-            elif not db.playoff_champion(league["id"]):
-                st.markdown(
-                    f'<p class="muted" style="text-align:center;">⏳ Playoff deadline: '
-                    f'<b>{playoff_deadline_date.strftime("%d %b %Y")}, 7:30 AM</b> — '
-                    f'unfinished ties auto-resolve by seed after this.</p>',
-                    unsafe_allow_html=True,
-                )
-
-        def tie_data(tie, leg1_no, leg2_no):
-            by_leg = {f["leg"]: f for f in tie}
-            if leg1_no not in by_leg or leg2_no not in by_leg:
-                return None
-            f1, f2 = by_leg[leg1_no], by_leg[leg2_no]
-            a, b = f1["home_player_id"], f1["away_player_id"]
-            agg = {a: 0, b: 0}
-            away = {a: 0, b: 0}
-            for f in (f1, f2):
-                if f["played"]:
-                    agg[f["home_player_id"]] += f["home_score"]
-                    agg[f["away_player_id"]] += f["away_score"]
-                    away[f["away_player_id"]] += f["away_score"]
-            winner = None
-            reason = None
-            if all(f["played"] for f in (f1, f2)):
-                if agg[a] != agg[b]:
-                    winner, reason = (a if agg[a] > agg[b] else b), "aggregate"
-                elif away[a] != away[b]:
-                    winner, reason = (a if away[a] > away[b] else b), "away goals"
-                else:
-                    seeds = {r["player_id"]: i + 1 for i, r in enumerate(db.get_standings(league["id"])[:8])}
-                    winner, reason = min((a, b), key=lambda pid: seeds.get(pid, 99)), "higher league seed"
-            return f1, f2, a, b, agg, away, winner, reason
-
-        def grouped_ties(fixtures, leg1_no, leg2_no):
-            """Group the two legs of each knockout tie by the two player IDs.
-            Always returns groups in deterministic order, based on the fixture
-            creation order supplied by the database."""
-            groups = {}
-            order = []
-            for f in fixtures:
-                if f["leg"] not in (leg1_no, leg2_no):
-                    continue
-                key = tuple(sorted((f["home_player_id"], f["away_player_id"])))
-                if key not in groups:
-                    groups[key] = []
-                    order.append(key)
-                groups[key].append(f)
-            return [groups[k] for k in order]
-
-        def tie_label(tie, leg1_no, leg2_no):
-            """Returns (home_ign, away_ign, agg_str, winner_id, reason,
-            home_id, away_id). The two *_id fields are what winner_id should
-            actually be compared against — home_ign/away_ign are just display
-            strings, never player ids."""
-            data = tie_data(tie, leg1_no, leg2_no)
-            if not data:
-                return ("TBD", "TBD", "–", None, None, None, None)
-            f1, f2, a, b, agg, away, winner, reason = data
-            return (
-                f1["home_ign"], f1["away_ign"],
-                f'{agg[a]} – {agg[b]}' if any(f["played"] for f in (f1, f2)) else "–",
-                winner, reason, a, b,
-            )
-
-        qf_groups = grouped_ties(qfs, db.QF_LEG1, db.QF_LEG2)
-        sf_groups = grouped_ties(sfs, db.SF_LEG1, db.SF_LEG2)
-
-        # QF ties must keep a STABLE label regardless of what order the DB
-        # happens to return fixtures in (that order can shift after any
-        # update, e.g. saving a score) — so label by seed pairing instead
-        # of list position: 1v8 -> QF1, 4v5 -> QF2, 2v7 -> QF3, 3v6 -> QF4.
-        _seeds_for_qf = {r["player_id"]: i + 1 for i, r in enumerate(db.get_standings(league["id"])[:8])}
-        _QF_SLOTS = {frozenset({1, 8}): 1, frozenset({4, 5}): 2, frozenset({2, 7}): 3, frozenset({3, 6}): 4}
-
-        def _qf_slot(group):
-            pair = frozenset({_seeds_for_qf.get(group[0]["home_player_id"]), _seeds_for_qf.get(group[0]["away_player_id"])})
-            return _QF_SLOTS.get(pair, 99)
-
-        qf_groups = sorted(qf_groups, key=_qf_slot)
-
-        if qf_groups:
-            qf_cards = []
-            for i, tie in enumerate(qf_groups, 1):
-                n1, n2, agg, winner, reason, home_id, away_id = tie_label(tie, db.QF_LEG1, db.QF_LEG2)
-                qf_cards.append((i, n1, n2, agg, winner, home_id, away_id))
-            # Build bracket grid items
-            left_qf1 = qf_cards[0] if len(qf_cards) > 0 else None
-            left_qf2 = qf_cards[1] if len(qf_cards) > 1 else None
-            right_qf1 = qf_cards[2] if len(qf_cards) > 2 else None
-            right_qf2 = qf_cards[3] if len(qf_cards) > 3 else None
-
-            # SF and final info. Semi-final ties are now created independently
-            # as each half of the bracket finishes (see db.advance_playoffs),
-            # so which one lands in the fixtures table first is no longer
-            # reliable — sf_groups[0] is NOT always "the QF1/QF2 semi". Each
-            # group is classified by the actual seed of a participant instead,
-            # so the bracket visual and the labels below always match reality
-            # regardless of which half finished first.
-            seeds = _seeds_for_qf
-
-            def sf_group_side(group):
-                """'A' = fed by QF1+QF2 (seeds 1/8/4/5), 'B' = fed by QF3+QF4 (seeds 2/7/3/6)."""
-                seed = seeds.get(group[0]["home_player_id"])
-                return 'A' if seed in (1, 4, 5, 8) else 'B'
-
-            sf1 = next((g for g in sf_groups if sf_group_side(g) == 'A'), None)
-            sf2 = next((g for g in sf_groups if sf_group_side(g) == 'B'), None)
-            final_match = final[0] if final else None
-
-            def match_html(card, round_label, winner_class=''):
-                if not card:
-                    return f'<div class="bracket-match bracket-pending"><div class="bracket-round">{round_label}</div><div class="bracket-team"><span>—</span></div><div class="bracket-team"><span>—</span></div></div>'
-                i, n1, n2, agg, winner, home_id, away_id = card
-                # NOTE: compare winner (a player id) against home_id/away_id —
-                # never against n1/n2, which are just display names.
-                w1 = ' winner' if winner and winner == home_id else ''
-                w2 = ' winner' if winner and winner == away_id else ''
-                return f'''<div class="bracket-match {winner_class}">
-                    <div class="bracket-round">{round_label}</div>
-                    <div class="bracket-team{w1}"><span>{n1}</span></div>
-                    <div class="bracket-team{w2}"><span>{n2}</span></div>
-                    <div class="bracket-agg-mini">Agg {agg}</div>
-                </div>'''
-
-            # Build SF cards
-            if sf1:
-                n1, n2, agg, winner, reason, _, _ = tie_label(sf1, db.SF_LEG1, db.SF_LEG2)
-                sf1_html = f'''<div class="bracket-match"><div class="bracket-round">SF 1</div>
-                    <div class="bracket-team{' winner' if winner and winner==sf1[0]['home_player_id'] else ''}"><span>{n1}</span></div>
-                    <div class="bracket-team{' winner' if winner and winner==sf1[0]['away_player_id'] else ''}"><span>{n2}</span></div>
-                    <div class="bracket-agg-mini">Agg {agg}</div></div>'''
-            else:
-                sf1_html = '<div class="bracket-match bracket-pending"><div class="bracket-round">SF 1</div><div class="bracket-team"><span>Winner QF1</span></div><div class="bracket-team"><span>Winner QF2</span></div></div>'
-
-            if sf2:
-                n1, n2, agg, winner, reason, _, _ = tie_label(sf2, db.SF_LEG1, db.SF_LEG2)
-                sf2_html = f'''<div class="bracket-match"><div class="bracket-round">SF 2</div>
-                    <div class="bracket-team{' winner' if winner and winner==sf2[0]['home_player_id'] else ''}"><span>{n1}</span></div>
-                    <div class="bracket-team{' winner' if winner and winner==sf2[0]['away_player_id'] else ''}"><span>{n2}</span></div>
-                    <div class="bracket-agg-mini">Agg {agg}</div></div>'''
-            else:
-                sf2_html = '<div class="bracket-match bracket-pending"><div class="bracket-round">SF 2</div><div class="bracket-team"><span>Winner QF3</span></div><div class="bracket-team"><span>Winner QF4</span></div></div>'
-
-            # Final
-            if final_match:
-                final_html = f'''<div class="bracket-match final"><div class="bracket-round">🏆 FINAL</div>
-                    <div class="bracket-team"><span>{final_match['home_ign']}</span></div>
-                    <div class="bracket-team"><span>{final_match['away_ign']}</span></div>
-                    <div class="bracket-final-score">{final_match['home_score']} – {final_match['away_score']}</div></div>'''
-            else:
-                final_html = '<div class="bracket-match final bracket-pending"><div class="bracket-round">🏆 FINAL</div><div class="bracket-team"><span>Winner SF1</span></div><div class="bracket-team"><span>Winner SF2</span></div><div class="bracket-final-score">FINAL AWAITS</div></div>'
-
-            # Build the 5-column grid with explicit row/column placement
-            # We'll use a 5-column grid with 3 rows: row1 top, row2 middle, row3 bottom
-            # col1: QF1 (row1), QF2 (row3)
-            # col2: SF1 (row2)
-            # col3: Final (row2)
-            # col4: SF2 (row2)
-            # col5: QF3 (row1), QF4 (row3)
-            # We'll put each match in a div with grid-column and grid-row styles
-
-            visual = f'''
-            <div class="bracket-wrap">
-                <div class="bracket-board" style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr 1fr; grid-template-rows:auto auto auto; gap:20px 8px; min-width:640px; padding:0.5rem; justify-items:center; align-items:center;">
-                    <!-- Row 1: QF1 (col1), QF3 (col5) -->
-                    <div style="grid-column:1; grid-row:1; width:100%;">{match_html(left_qf1, 'QF 1')}</div>
-                    <div style="grid-column:5; grid-row:1; width:100%;">{match_html(right_qf1, 'QF 3')}</div>
-                    <!-- Row 2: SF1 (col2), Final (col3), SF2 (col4) -->
-                    <div style="grid-column:2; grid-row:2; width:100%;">{sf1_html}</div>
-                    <div style="grid-column:3; grid-row:2; width:100%;">{final_html}</div>
-                    <div style="grid-column:4; grid-row:2; width:100%;">{sf2_html}</div>
-                    <!-- Row 3: QF2 (col1), QF4 (col5) -->
-                    <div style="grid-column:1; grid-row:3; width:100%;">{match_html(left_qf2, 'QF 2')}</div>
-                    <div style="grid-column:5; grid-row:3; width:100%;">{match_html(right_qf2, 'QF 4')}</div>
-                </div>
-            </div>
-            '''
-            st.markdown(visual, unsafe_allow_html=True)
-
-            st.markdown('<div class="knockout-title">Match results</div>', unsafe_allow_html=True)
-
-            def render_tie_editor(tie, title):
-                is_qf = title.startswith("QF")
-                leg1_no = db.QF_LEG1 if is_qf else db.SF_LEG1
-                leg2_no = db.QF_LEG2 if is_qf else db.SF_LEG2
-                data = tie_data(tie, leg1_no, leg2_no)
-                if not data:
-                    return
-                f1, f2, a, b, agg, away, winner, reason = data
-                # A tie is "locked" once ITS OWN winner has actually been placed
-                # into the next round — not just whenever any next-round fixture
-                # exists. Semi-finals are now created one pair at a time, so
-                # e.g. QF3/QF4 must stay editable even after QF1/QF2 have
-                # already advanced into SF1.
-                next_round_fixtures = sfs if is_qf else final
-                round_has_next = db.tie_has_advanced(winner, next_round_fixtures)
-
-                with st.container(border=True):
-                    st.markdown(f"**{title}** — {f1['home_ign']} vs {f1['away_ign']}")
-                    for label, f in (("Leg 1", f1), ("Leg 2", f2)):
-                        home_label = f"{f['home_ign']} (H)"
-                        away_label = f"{f['away_ign']} (A)"
-                        if f["played"]:
-                            st.markdown(f"**{label}:** {home_label} vs {away_label} — :green[**{f['home_score']} – {f['away_score']}**]")
-                            if not round_has_next and league.get("status") == "active":
-                                if render_undo_control(f["id"], "po"):
-                                    st.rerun()
-                            elif round_has_next:
-                                st.caption("🔒 Advanced to the next round")
-                        elif league.get("status") == "active":
-                            if render_score_entry(f["id"], "po", f"{label} {home_label}", f"{label} {away_label}", f"Save {label}"):
-                                st.rerun()
-                    st.caption(f"Aggregate: {agg[a]} – {agg[b]}  •  Away goals: {away[a]} – {away[b]}")
-                    if winner:
-                        win_name = f1["home_ign"] if winner == a else f1["away_ign"]
-                        st.success(f"{win_name} advances ({reason}).")
-
-            qf_all_done = bool(qf_groups) and all(tie_data(t, db.QF_LEG1, db.QF_LEG2)[6] for t in qf_groups)
-            sf_all_done = bool(sf_groups) and all(tie_data(t, db.SF_LEG1, db.SF_LEG2)[6] for t in sf_groups)
-
-            tab_labels = [
-                f"Quarter Final{' ✅' if qf_all_done else ''}",
-                f"Semi Final{' ✅' if sf_all_done else ''}" if sf_groups else "Semi Final 🔒",
-                "Final" if final else "Final 🔒",
-            ]
-            qf_tab, sf_tab, final_tab = st.tabs(tab_labels)
-
-            with qf_tab:
-                for i, tie in enumerate(qf_groups, 1):
-                    render_tie_editor(tie, f"QF {i}")
-
-            with sf_tab:
-                if not sf_groups:
-                    st.markdown('<p class="muted">Semi-finals unlock as soon as both feeder quarter-finals for a half of the bracket are decided.</p>', unsafe_allow_html=True)
-                else:
-                    for i, tie in ((1, sf1), (2, sf2)):
-                        if tie:
-                            render_tie_editor(tie, f"SF {i}")
-
-            with final_tab:
-                if not final:
-                    st.markdown('<p class="muted">The final unlocks once both semi-finals are decided.</p>', unsafe_allow_html=True)
-                else:
-                    f = final[0]
-                    with st.container(border=True):
-                        st.markdown(f'**{f["home_ign"]}** vs **{f["away_ign"]}**')
-                        if f["played"]:
-                            st.markdown(f':green[🏆 **{f["home_score"]} – {f["away_score"]}**]')
-                            if league.get("status") == "active":
-                                if render_undo_control(f["id"], "po"):
-                                    st.rerun()
-                            champion = db.playoff_champion(league["id"])
-                            if champion:
-                                winner_name = f["home_ign"] if champion == f["home_player_id"] else f["away_ign"]
-                                st.success(f"🏆 Champion: {winner_name}")
-                        elif league.get("status") == "active":
-                            if render_score_entry(f["id"], "po", "Final H", "Final A", "Save Final"):
-                                st.rerun()
-        else:
-            st.info("The top-8 playoff bracket will appear here once the league stage is completed.")
+        render_playoff_bracket(league)
 
 
 # ------------------------------------------------------------------- History --
@@ -892,9 +886,13 @@ elif page_key == "history":
         for lg in completed:
             winner = lg.get("winner")
             winner_str = f"{winner['ign']} ({winner['club_name']})" if winner else "—"
-            with st.expander(f"🏆 {lg['name']} — winner: {winner_str}"):
+            with st.expander(f"{lg['name']} — winner: {winner_str}"):
                 table = db.get_standings(lg["id"])
                 render_table(standings_rows(table), top8_marker=True)
+                if db.playoffs_started(lg["id"]):
+                    st.markdown('<div class="knockout-title">Playoff bracket</div>', unsafe_allow_html=True)
+                    render_playoff_bracket(lg)
+
 
 
 # ------------------------------------------------------------------ Register --
@@ -1037,14 +1035,14 @@ elif page_key == "admin":
 
             st.markdown('<p class="section-title" style="font-size: 1rem;">Leg 2 lock</p>', unsafe_allow_html=True)
             if active_league["leg2_unlocked"]:
-                st.markdown('<p class="muted">🔓 Leg 2 is unlocked.</p>', unsafe_allow_html=True)
+                st.markdown('<p class="muted">Leg 2 is unlocked.</p>', unsafe_allow_html=True)
             else:
                 all_leg1_done = db.leg1_complete(active_league["id"])
                 fixtures_now = [f for f in db.list_fixtures(active_league["id"]) if f["leg"] in (1, 2)]
                 leg1_total = sum(1 for f in fixtures_now if f["leg"] == 1)
                 leg1_played = sum(1 for f in fixtures_now if f["leg"] == 1 and f["played"])
                 st.markdown(f'<p class="muted">Leg 1 progress: {leg1_played}/{leg1_total} played</p>', unsafe_allow_html=True)
-                if st.button("🔓 Unlock Leg 2 matches", disabled=not all_leg1_done):
+                if st.button("Unlock Leg 2 matches", disabled=not all_leg1_done):
                     db.unlock_leg2(active_league["id"])
                     st.rerun()
                 if not all_leg1_done:
@@ -1056,7 +1054,7 @@ elif page_key == "admin":
             if league_done:
                 if len(table_now) >= 8:
                     st.markdown('<p class="muted">League stage complete. The top 8 will be seeded into the knockout bracket: 1v8, 4v5, 2v7, 3v6.</p>', unsafe_allow_html=True)
-                    if st.button("🏆 Finish league stage & create Top 8 playoffs", type="primary", use_container_width=True):
+                    if st.button("Finish league stage & create Top 8 playoffs", type="primary", use_container_width=True):
                         try:
                             db.create_playoffs(active_league["id"])
                             st.success("League stage locked — quarter-finals created.")
@@ -1081,14 +1079,14 @@ elif page_key == "admin":
                     "Player to add", options=[p["id"] for p in joinable],
                     format_func=lambda pid: player_label(next(p for p in joinable if p["id"] == pid)),
                 )
-                if st.button("➕ Add to league"):
+                if st.button("Add to league"):
                     try:
                         db.add_player_to_league(active_league["id"], new_player_id)
                         st.rerun()
                     except Exception as e:
                         st.error(str(e))
         else:
-            st.success("🏆 League stage complete — Top 8 playoffs are in progress. Knockout rounds advance automatically when each tie is finished.")
+            st.success("League stage complete — Top 8 playoffs are in progress. Knockout rounds advance automatically when each tie is finished.")
 
             st.markdown('<p class="section-title" style="font-size: 1rem;">Playoff deadline</p>', unsafe_allow_html=True)
             st.markdown(
@@ -1122,8 +1120,8 @@ elif page_key == "admin":
                 players = {p["id"]: p for p in db.list_players()}
                 winner = players.get(champion)
                 winner_name = f"{winner['ign']} ({winner['club_name']})" if winner else "Champion"
-                st.success(f"🏆 {winner_name} has won the season!")
-                if st.button("🏁 Archive season", type="primary", use_container_width=True):
+                st.success(f"{winner_name} has won the season!")
+                if st.button("Archive season", type="primary", use_container_width=True):
                     try:
                         db.complete_league(active_league["id"])
                         st.rerun()
@@ -1144,13 +1142,13 @@ elif page_key == "admin":
                 score = f"{f['home_score']}-{f['away_score']}" if f["played"] else "unplayed"
                 with st.expander(f"{f['home_ign']} vs {f['away_ign']} — {score}"):
                     confirm_del = st.checkbox("Confirm delete — no undo", key=f"confirm_orphan_del_{f['id']}")
-                    if st.button("🗑️ Delete this match", key=f"orphan_del_{f['id']}", disabled=not confirm_del):
+                    if st.button("Delete this match", key=f"orphan_del_{f['id']}", disabled=not confirm_del):
                         db.delete_fixture(f["id"])
                         st.rerun()
 
         st.markdown('<p class="muted">Made a mistake starting this one? Cancel it below instead of archiving it — this deletes the league and all its fixtures with no undo.</p>', unsafe_allow_html=True)
         cancel_confirm = st.checkbox("Confirm cancel — delete this league", key="cancel_active_confirm")
-        if st.button("🗑️ Cancel & delete this league", disabled=not cancel_confirm):
+        if st.button("Cancel & delete this league", disabled=not cancel_confirm):
             db.delete_league(active_league["id"])
             st.rerun()
     else:
@@ -1173,7 +1171,7 @@ elif page_key == "admin":
             leg2_min = deadline_val if deadline_val else date.today()
             leg2_deadline_val = st.date_input("Leg 2 deadline date", min_value=leg2_min, key="leg2_deadline_input")
 
-        if st.button("🚀 Start league", type="primary"):
+        if st.button("Start league", type="primary"):
             if len(chosen) < 2:
                 st.error("Pick at least 2 players.")
             else:
@@ -1195,6 +1193,6 @@ elif page_key == "admin":
             c1, c2, c3 = st.columns([4, 2, 1])
             c1.write(f"**{lg['name']}**")
             confirm = c2.checkbox("Confirm delete", key=f"confirm_del_{lg['id']}")
-            if c3.button("🗑️ Delete", key=f"del_league_{lg['id']}", disabled=not confirm):
+            if c3.button("Delete", key=f"del_league_{lg['id']}", disabled=not confirm):
                 db.delete_league(lg["id"])
                 st.rerun()
